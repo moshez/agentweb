@@ -1,0 +1,55 @@
+.input-box {
+  display: flex;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: var(--input-bg, #1a1a1a);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.input-textarea {
+  flex: 1;
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: var(--textarea-bg, #2d2d2d);
+  color: inherit;
+  font-family: inherit;
+  font-size: 1rem;
+  resize: none;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.input-textarea:focus {
+  border-color: #3498db;
+}
+
+.input-textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.input-textarea::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.submit-button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  background: #3498db;
+  color: white;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, opacity 0.2s;
+}
+
+.submit-button:hover:not(:disabled) {
+  background: #2980b9;
+}
+
+.submit-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

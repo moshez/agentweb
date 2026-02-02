@@ -1,0 +1,84 @@
+import express from 'express'
+import { WebSocketServer, WebSocket } from 'ws'
+import { createServer } from 'http'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import type { QueryRequest, ErrorMessage } from './types.js'
+import { handleQuery } from './query-handler.js'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+const PORT = parseInt(process.env.PORT || '8888', 10)
+
+const app = express()
+
+// Serve static React build
+const distPath = path.join(__dirname, '../dist')
+app.use(express.static(distPath))
+
+// Fallback to index.html for SPA routing
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(distPath, 'index.html'))
+})
+
+const server = createServer(app)
+
+// WebSocket server for Agent SDK streaming
+const wss = new WebSocketServer({ server })
+
+wss.on('connection', (ws: WebSocket) => {
+  console.log('Client connected')
+
+  ws.on('message', (data: Buffer) => {
+    void (async () => {
+      try {
+        const request = JSON.parse(data.toString()) as QueryRequest
+
+        if (!request.prompt) {
+          const error: ErrorMessage = {
+            type: 'error',
+            error: 'Missing required field: prompt',
+          }
+          ws.send(JSON.stringify(error))
+          return
+        }
+
+        await handleQuery(request, (message) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(message))
+          }
+        })
+      } catch (error) {
+        const errorMessage: ErrorMessage = {
+          type: 'error',
+          error: error instanceof Error ? error.message : 'Unknown error',
+        }
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(errorMessage))
+        }
+      }
+    })()
+  })
+
+  ws.on('close', () => {
+    console.log('Client disconnected')
+  })
+
+  ws.on('error', (error) => {
+    console.error('WebSocket error:', error)
+  })
+})
+
+export function startServer(): void {
+  server.listen(PORT, () => {
+    console.log(`agentweb running on http://localhost:${PORT}`)
+  })
+}
+
+// Start server if this is the main module
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  startServer()
+}
+
+export { app, server, wss }
