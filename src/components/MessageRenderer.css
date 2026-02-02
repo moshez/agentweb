@@ -1,0 +1,159 @@
+.message {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border-radius: 8px;
+  background: var(--message-bg, #2d2d2d);
+}
+
+.message-text {
+  background: var(--text-message-bg, #1e1e1e);
+}
+
+.message-text p {
+  margin: 0 0 0.5rem 0;
+}
+
+.message-text p:last-child {
+  margin-bottom: 0;
+}
+
+.inline-code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+  font-family: 'Fira Code', 'Consolas', monospace;
+  font-size: 0.9em;
+}
+
+.message-tool-use {
+  background: var(--tool-use-bg, #1a3a5c);
+  border-left: 3px solid #3498db;
+}
+
+.tool-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+}
+
+.tool-icon {
+  font-size: 1.2em;
+}
+
+.tool-name {
+  color: #3498db;
+}
+
+.tool-input {
+  margin: 0;
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 0.85rem;
+}
+
+.message-tool-result {
+  background: var(--tool-result-bg, #1a4a3a);
+  border-left: 3px solid #2ecc71;
+}
+
+.message-tool-result.error {
+  background: var(--tool-result-error-bg, #4a1a1a);
+  border-left-color: #e74c3c;
+}
+
+.tool-result-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+}
+
+.result-icon {
+  font-size: 1em;
+}
+
+.tool-result-content {
+  margin: 0;
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.message-thinking {
+  background: var(--thinking-bg, #3d3d1a);
+  border-left: 3px solid #f1c40f;
+  opacity: 0.8;
+}
+
+.thinking-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+  color: #f1c40f;
+}
+
+.thinking-icon {
+  font-size: 1.2em;
+}
+
+.thinking-content {
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.message-error {
+  background: var(--error-bg, #4a1a1a);
+  border-left: 3px solid #e74c3c;
+}
+
+.error-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+  color: #e74c3c;
+}
+
+.error-icon {
+  font-size: 1.2em;
+}
+
+.error-content {
+  color: #ff6b6b;
+}
+
+.message-system {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.85rem;
+}
+
+.system-icon {
+  font-size: 0.9em;
+}
+
+.message-unknown {
+  background: var(--unknown-bg, #2d2d2d);
+  border-left: 3px solid #95a5a6;
+}
+
+.message-unknown pre {
+  margin: 0;
+  font-size: 0.85rem;
+}

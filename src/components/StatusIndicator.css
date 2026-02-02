@@ -1,0 +1,42 @@
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-connecting {
+  color: #f1c40f;
+}
+
+.status-connecting .status-dot {
+  animation: blink 1s ease-in-out infinite;
+}
+
+.status-connected {
+  color: #2ecc71;
+}
+
+.status-disconnected {
+  color: #95a5a6;
+}
+
+.status-error {
+  color: #e74c3c;
+}
+
+@keyframes blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
