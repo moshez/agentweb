@@ -97,21 +97,21 @@ export function MessageRenderer({ message }: MessageRendererProps) {
         </div>
       )
 
-    case 'start':
+    case 'user':
       return (
-        <div className="message message-system">
-          <span className="system-icon">▶️</span>
-          <span>Session started</span>
+        <div className="message message-user">
+          <div className="user-header">
+            <span className="user-icon">👤</span>
+            <span>You</span>
+          </div>
+          <div className="user-content">{message.content}</div>
         </div>
       )
 
+    case 'start':
     case 'end':
-      return (
-        <div className="message message-system">
-          <span className="system-icon">⏹️</span>
-          <span>Response complete</span>
-        </div>
-      )
+      // Don't render start/end messages in the UI
+      return null
 
     default:
       return (

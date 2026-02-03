@@ -4,6 +4,11 @@
   height: 100vh;
   max-width: 1200px;
   margin: 0 auto;
+  transition: margin-left 0.3s ease;
+}
+
+.app.sidebar-open {
+  margin-left: 260px;
 }
 
 .app-header {

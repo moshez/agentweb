@@ -38,7 +38,8 @@ rl.on('line', (line: string) => {
         return
       }
 
-      await handleQuery(request, sendMessage)
+      const controller = handleQuery(request, sendMessage)
+      await controller.promise
     } catch (error) {
       const errorMessage: ErrorMessage = {
         type: 'error',

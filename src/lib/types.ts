@@ -51,6 +51,11 @@ export interface EndMessage {
   stop_reason?: string
 }
 
+export interface UserMessage {
+  type: 'user'
+  content: string
+}
+
 export type SDKMessage =
   | TextMessage
   | ToolUseMessage
@@ -59,6 +64,7 @@ export type SDKMessage =
   | ErrorMessage
   | StartMessage
   | EndMessage
+  | UserMessage
 
 export interface QueryRequest {
   prompt: string
@@ -73,3 +79,18 @@ export interface QueryOptions {
 }
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
+
+export interface Session {
+  id: string
+  name: string
+  createdAt: string
+  updatedAt: string
+  messages: SDKMessage[]
+}
+
+export interface SessionSummary {
+  id: string
+  name: string
+  createdAt: string
+  updatedAt: string
+}

@@ -3,24 +3,28 @@ import './InputBox.css'
 
 interface InputBoxProps {
   onSubmit: (message: string) => void
-  disabled?: boolean
+  onStop?: () => void
+  canSend: boolean
+  isProcessing: boolean
   placeholder?: string
 }
 
 export function InputBox({
   onSubmit,
-  disabled = false,
+  onStop,
+  canSend,
+  isProcessing,
   placeholder = 'Type your message...',
 }: InputBoxProps) {
   const [value, setValue] = useState('')
 
   const handleSubmit = useCallback(() => {
     const trimmedValue = value.trim()
-    if (trimmedValue && !disabled) {
+    if (trimmedValue && canSend && !isProcessing) {
       onSubmit(trimmedValue)
       setValue('')
     }
-  }, [value, disabled, onSubmit])
+  }, [value, canSend, isProcessing, onSubmit])
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -32,6 +36,8 @@ export function InputBox({
     [handleSubmit]
   )
 
+  const sendDisabled = !canSend || isProcessing || !value.trim()
+
   return (
     <div className="input-box">
       <textarea
@@ -39,17 +45,29 @@ export function InputBox({
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        disabled={disabled}
         rows={3}
         className="input-textarea"
       />
-      <button
-        onClick={handleSubmit}
-        disabled={disabled || !value.trim()}
-        className="submit-button"
-      >
-        Send
-      </button>
+      <div className="input-actions">
+        {isProcessing ? (
+          <button
+            onClick={onStop}
+            className="stop-button"
+            type="button"
+          >
+            Stop
+          </button>
+        ) : (
+          <button
+            onClick={handleSubmit}
+            disabled={sendDisabled}
+            className="submit-button"
+            type="button"
+          >
+            Send
+          </button>
+        )}
+      </div>
     </div>
   )
 }

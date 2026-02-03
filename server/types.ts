@@ -51,3 +51,22 @@ export interface SDKIncomingMessage {
   errors?: string[]
   content?: unknown
 }
+
+/**
+ * Session types for persistent storage
+ */
+
+export interface Session {
+  id: string
+  name: string
+  createdAt: string
+  updatedAt: string
+  messages: SDKMessage[]
+}
+
+export interface SessionSummary {
+  id: string
+  name: string
+  createdAt: string
+  updatedAt: string
+}

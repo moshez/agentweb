@@ -148,6 +148,31 @@
   font-size: 0.9em;
 }
 
+.message-user {
+  background: var(--user-message-bg, #2d4a5c);
+  border-left: 3px solid #9b59b6;
+  margin-left: auto;
+  max-width: 85%;
+}
+
+.user-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+  color: #9b59b6;
+}
+
+.user-icon {
+  font-size: 1.2em;
+}
+
+.user-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .message-unknown {
   background: var(--unknown-bg, #2d2d2d);
   border-left: 3px solid #95a5a6;

@@ -1,11 +1,12 @@
-import express from 'express'
+import express, { Request, Response, NextFunction, RequestHandler } from 'express'
 import { WebSocketServer, WebSocket } from 'ws'
 import { createServer } from 'http'
 import path from 'path'
 import { existsSync } from 'fs'
 import { fileURLToPath } from 'url'
-import type { QueryRequest, ErrorMessage } from './types.js'
-import { handleQuery } from './query-handler.js'
+import type { QueryRequest, ErrorMessage, Session } from './types.js'
+import { handleQuery, type QueryController } from './query-handler.js'
+import { listSessions, getSession, saveSession, deleteSession } from './session-manager.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -35,6 +36,70 @@ const PORT = parseInt(process.env.PORT || '8765', 10)
 
 const app = express()
 
+// JSON body parsing for REST API
+app.use(express.json())
+
+// Wrapper for async route handlers
+function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<void>): RequestHandler {
+  return (req, res, next) => {
+    fn(req, res, next).catch(next)
+  }
+}
+
+// Session API endpoints
+app.get('/api/sessions', asyncHandler(async (_req, res) => {
+  try {
+    const sessions = await listSessions()
+    res.json(sessions)
+  } catch (error) {
+    console.error('Failed to list sessions:', error)
+    res.status(500).json({ error: 'Failed to list sessions' })
+  }
+}))
+
+app.get('/api/sessions/:id', asyncHandler(async (req, res) => {
+  try {
+    const session = await getSession(req.params.id)
+    if (session) {
+      res.json(session)
+    } else {
+      res.status(404).json({ error: 'Session not found' })
+    }
+  } catch (error) {
+    console.error('Failed to get session:', error)
+    res.status(500).json({ error: 'Failed to get session' })
+  }
+}))
+
+app.put('/api/sessions/:id', asyncHandler(async (req, res) => {
+  try {
+    const session = req.body as Session
+    if (!session.id || session.id !== req.params.id) {
+      res.status(400).json({ error: 'Session ID mismatch' })
+      return
+    }
+    await saveSession(session)
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Failed to save session:', error)
+    res.status(500).json({ error: 'Failed to save session' })
+  }
+}))
+
+app.delete('/api/sessions/:id', asyncHandler(async (req, res) => {
+  try {
+    const deleted = await deleteSession(req.params.id)
+    if (deleted) {
+      res.json({ success: true })
+    } else {
+      res.status(404).json({ error: 'Session not found' })
+    }
+  } catch (error) {
+    console.error('Failed to delete session:', error)
+    res.status(500).json({ error: 'Failed to delete session' })
+  }
+}))
+
 // Detect if running as compiled binary (Bun uses /$bunfs/ for embedded files)
 const distPath = path.join(__dirname, '../dist')
 const isCompiledBinary = !existsSync(distPath)
@@ -51,6 +116,12 @@ if (isCompiledBinary) {
 
   if (embeddedAssets) {
     app.get('*', (req, res) => {
+      // Skip API routes
+      if (req.path.startsWith('/api/')) {
+        res.status(404).json({ error: 'Not found' })
+        return
+      }
+
       let assetPath = req.path
       if (assetPath === '/') assetPath = '/index.html'
 
@@ -82,8 +153,12 @@ if (isCompiledBinary) {
   // Serve static React build from filesystem
   app.use(express.static(distPath))
 
-  // Fallback to index.html for SPA routing
-  app.get('*', (_req, res) => {
+  // Fallback to index.html for SPA routing (but not for API routes)
+  app.get('*', (req, res) => {
+    if (req.path.startsWith('/api/')) {
+      res.status(404).json({ error: 'Not found' })
+      return
+    }
     res.sendFile(path.join(distPath, 'index.html'))
   })
 }
@@ -93,13 +168,28 @@ const server = createServer(app)
 // WebSocket server for Agent SDK streaming
 const wss = new WebSocketServer({ server })
 
+// Track active query controllers per connection
+const activeControllers = new Map<WebSocket, QueryController>()
+
 wss.on('connection', (ws: WebSocket) => {
   console.log('Client connected')
 
   ws.on('message', (data: Buffer) => {
     void (async () => {
       try {
-        const request = JSON.parse(data.toString()) as QueryRequest
+        const message = JSON.parse(data.toString()) as QueryRequest | { type: 'stop' }
+
+        // Handle stop request
+        if ('type' in message && message.type === 'stop') {
+          const controller = activeControllers.get(ws)
+          if (controller) {
+            controller.abort()
+            activeControllers.delete(ws)
+          }
+          return
+        }
+
+        const request = message as QueryRequest
 
         if (!request.prompt) {
           const error: ErrorMessage = {
@@ -110,11 +200,18 @@ wss.on('connection', (ws: WebSocket) => {
           return
         }
 
-        await handleQuery(request, (message) => {
+        const controller = handleQuery(request, (msg) => {
           if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify(message))
+            ws.send(JSON.stringify(msg))
           }
         })
+
+        activeControllers.set(ws, controller)
+
+        // Wait for the query to complete
+        await controller.promise
+
+        activeControllers.delete(ws)
       } catch (error) {
         const errorMessage: ErrorMessage = {
           type: 'error',
@@ -129,6 +226,12 @@ wss.on('connection', (ws: WebSocket) => {
 
   ws.on('close', () => {
     console.log('Client disconnected')
+    // Abort any active query when client disconnects
+    const controller = activeControllers.get(ws)
+    if (controller) {
+      controller.abort()
+      activeControllers.delete(ws)
+    }
   })
 
   ws.on('error', (error) => {

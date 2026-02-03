@@ -32,7 +32,8 @@ describe('handleQuery', () => {
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
     const request: QueryRequest = { prompt: 'Hello' }
 
-    await handleQuery(request, onMessage)
+    const controller = handleQuery(request, onMessage)
+    await controller.promise
 
     const startMessage = onMessage.mock.calls.find(
       (call) => (call[0] as SDKMessage).type === 'start'
@@ -46,7 +47,8 @@ describe('handleQuery', () => {
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
     const request: QueryRequest = { prompt: 'Hello' }
 
-    await handleQuery(request, onMessage)
+    const controller = handleQuery(request, onMessage)
+    await controller.promise
 
     const endMessage = onMessage.mock.calls.find(
       (call) => (call[0] as SDKMessage).type === 'end'
@@ -67,7 +69,8 @@ describe('handleQuery', () => {
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
     const request: QueryRequest = { prompt: 'Hello' }
 
-    await handleQuery(request, onMessage)
+    const controller = handleQuery(request, onMessage)
+    await controller.promise
 
     const textMessage = onMessage.mock.calls.find(
       (call) => (call[0] as SDKMessage).type === 'text'
@@ -90,7 +93,8 @@ describe('handleQuery', () => {
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
     const request: QueryRequest = { prompt: 'Read a file' }
 
-    await handleQuery(request, onMessage)
+    const controller = handleQuery(request, onMessage)
+    await controller.promise
 
     const toolUseMessage = onMessage.mock.calls.find(
       (call) => (call[0] as SDKMessage).type === 'tool_use'
@@ -114,7 +118,8 @@ describe('handleQuery', () => {
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
     const request: QueryRequest = { prompt: 'Read a file' }
 
-    await handleQuery(request, onMessage)
+    const controller = handleQuery(request, onMessage)
+    await controller.promise
 
     const toolResultMessage = onMessage.mock.calls.find(
       (call) => (call[0] as SDKMessage).type === 'tool_result'
@@ -138,7 +143,8 @@ describe('handleQuery', () => {
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
     const request: QueryRequest = { prompt: 'Hello' }
 
-    await handleQuery(request, onMessage)
+    const controller = handleQuery(request, onMessage)
+    await controller.promise
 
     const thinkingMessage = onMessage.mock.calls.find(
       (call) => (call[0] as SDKMessage).type === 'thinking'
@@ -158,7 +164,13 @@ describe('handleQuery', () => {
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
     const request: QueryRequest = { prompt: 'Hello' }
 
-    await handleQuery(request, onMessage)
+    const controller = handleQuery(request, onMessage)
+    // The promise will reject but we catch it
+    try {
+      await controller.promise
+    } catch {
+      // Expected to reject
+    }
 
     const errorMessage = onMessage.mock.calls.find(
       (call) => (call[0] as SDKMessage).type === 'error'
@@ -177,7 +189,8 @@ describe('handleQuery', () => {
       options: { model: 'claude-3-opus', systemPrompt: 'Be helpful' },
     }
 
-    await handleQuery(request, onMessage)
+    const controller = handleQuery(request, onMessage)
+    await controller.promise
 
     expect(mockQuery).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -202,7 +215,8 @@ describe('handleQuery', () => {
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
     const request: QueryRequest = { prompt: 'Do something' }
 
-    await handleQuery(request, onMessage)
+    const controller = handleQuery(request, onMessage)
+    await controller.promise
 
     const textMessage = onMessage.mock.calls.find(
       (call) => {
