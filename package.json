@@ -8,21 +8,21 @@
     "agentweb": "./bin/agentweb.js"
   },
   "scripts": {
-    "dev": "npx vite",
-    "build": "npx tsc -b && npx vite build",
-    "build:server": "npx tsc -p tsconfig.server.json",
+    "dev": "./node_modules/.bin/vite",
+    "build": "./node_modules/.bin/tsc -b && ./node_modules/.bin/vite build",
+    "build:server": "./node_modules/.bin/tsc -p tsconfig.server.json",
     "build:all": "npm run build && npm run build:server",
     "prestart": "npm run build:server",
     "start": "node dist-server/server.js",
     "prestart:stdio": "npm run build:server",
     "start:stdio": "node dist-server/stdio.js",
-    "preview": "npx vite preview",
-    "test": "npx vitest run",
-    "test:watch": "npx vitest",
-    "test:coverage": "npx vitest run --coverage",
-    "lint": "npx eslint . --ext .ts,.tsx --report-unused-disable-directives --max-warnings 0",
-    "lint:fix": "npx eslint . --ext .ts,.tsx --fix",
-    "typecheck": "npx tsc --noEmit && npx tsc -p tsconfig.server.json --noEmit"
+    "preview": "./node_modules/.bin/vite preview",
+    "test": "./node_modules/.bin/vitest run",
+    "test:watch": "./node_modules/.bin/vitest",
+    "test:coverage": "./node_modules/.bin/vitest run --coverage",
+    "lint": "./node_modules/.bin/eslint . --ext .ts,.tsx --report-unused-disable-directives --max-warnings 0",
+    "lint:fix": "./node_modules/.bin/eslint . --ext .ts,.tsx --fix",
+    "typecheck": "./node_modules/.bin/tsc --noEmit && ./node_modules/.bin/tsc -p tsconfig.server.json --noEmit"
   },
   "dependencies": {
     "express": "^4.18.2",
