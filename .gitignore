@@ -4,6 +4,10 @@ node_modules/
 # Build output
 dist/
 dist-server/
+dist-binaries/
+
+# Generated assets for single-binary build
+server/embedded-assets.ts
 
 # IDE
 .vscode/

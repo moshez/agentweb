@@ -2,6 +2,7 @@ import express from 'express'
 import { WebSocketServer, WebSocket } from 'ws'
 import { createServer } from 'http'
 import path from 'path'
+import { existsSync } from 'fs'
 import { fileURLToPath } from 'url'
 import type { QueryRequest, ErrorMessage } from './types.js'
 import { handleQuery } from './query-handler.js'
@@ -13,14 +14,58 @@ const PORT = parseInt(process.env.PORT || '8765', 10)
 
 const app = express()
 
-// Serve static React build
+// Detect if running as compiled binary (Bun uses /$bunfs/ for embedded files)
 const distPath = path.join(__dirname, '../dist')
-app.use(express.static(distPath))
+const isCompiledBinary = !existsSync(distPath)
 
-// Fallback to index.html for SPA routing
-app.get('*', (_req, res) => {
-  res.sendFile(path.join(distPath, 'index.html'))
-})
+if (isCompiledBinary) {
+  // Serve from embedded assets
+  let embeddedAssets: typeof import('./embedded-assets.js') | undefined
+  try {
+    embeddedAssets = await import('./embedded-assets.js')
+  } catch {
+    console.error('Warning: Running as compiled binary but embedded assets not found.')
+    console.error('The binary may have been built without running embed-assets.ts first.')
+  }
+
+  if (embeddedAssets) {
+    app.get('*', (req, res) => {
+      let assetPath = req.path
+      if (assetPath === '/') assetPath = '/index.html'
+
+      const asset = embeddedAssets.getAsset(assetPath)
+      if (asset) {
+        const isBase64 = asset.contentType.includes(';base64')
+        const contentType = isBase64
+          ? asset.contentType.replace(';base64', '')
+          : asset.contentType
+        res.setHeader('Content-Type', contentType)
+        if (isBase64) {
+          res.send(Buffer.from(asset.content, 'base64'))
+        } else {
+          res.send(asset.content)
+        }
+      } else {
+        // SPA fallback - serve index.html for unknown routes
+        const indexAsset = embeddedAssets.getIndexHtml()
+        if (indexAsset) {
+          res.setHeader('Content-Type', 'text/html; charset=utf-8')
+          res.send(indexAsset.content)
+        } else {
+          res.status(404).send('Not found')
+        }
+      }
+    })
+  }
+} else {
+  // Serve static React build from filesystem
+  app.use(express.static(distPath))
+
+  // Fallback to index.html for SPA routing
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'))
+  })
+}
 
 const server = createServer(app)
 
