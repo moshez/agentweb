@@ -16,16 +16,19 @@ const firstArg = process.argv[2]
 if (firstArg && firstArg.endsWith('.js') && existsSync(firstArg)) {
   // We're being asked to run a JavaScript file
   // Import and run it - this works because Bun's runtime is embedded in the binary
-  // NOTE: Don't log anything here - the CLI uses stdout for JSON protocol
+  // NOTE: Don't log anything to stdout - the CLI uses it for JSON protocol
   try {
     await import(path.resolve(firstArg))
+    // Don't exit - the CLI will handle its own lifecycle
+    // It needs to keep running to process stdin/stdout with the SDK
   } catch (err) {
     // Log errors to stderr only
     console.error('Failed to run script:', err)
     process.exit(1)
   }
-  // Don't start the server - we're just a script runner in this mode
-  process.exit(0)
+  // Block forever - let the imported script handle everything
+  // The process will exit when the CLI terminates or stdin closes
+  await new Promise(() => {})
 }
 
 const PORT = parseInt(process.env.PORT || '8765', 10)
