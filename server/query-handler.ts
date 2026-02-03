@@ -1,5 +1,5 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
-import type { QueryRequest, SDKMessage, ErrorMessage, SDKIncomingMessage, SDKContentBlock } from './types.js'
+import type { QueryRequest, SDKMessage, ErrorMessage, SDKIncomingMessage, SDKContentBlock, ConversationMessage } from './types.js'
 import { getClaudeCodeCliPath, getJsRuntime, getRuntimeEnv } from './cli-extractor.js'
 
 /**
@@ -49,9 +49,12 @@ export function handleQuery(
         pathModified: env.PATH !== process.env.PATH,
       })
 
+      // Build prompt with conversation history for multi-turn support
+      const promptWithHistory = buildPromptWithHistory(request.prompt, request.messages)
+
       // Call the Claude Agent SDK
       for await (const message of query({
-        prompt: request.prompt,
+        prompt: promptWithHistory,
         options: {
           model: request.options?.model,
           systemPrompt: request.options?.systemPrompt,
@@ -238,4 +241,53 @@ function transformSDKMessage(message: SDKIncomingMessage): SDKMessage[] {
 
 function generateSessionId(): string {
   return `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+}
+
+/**
+ * Build a prompt that includes conversation history for multi-turn support.
+ * Since the SDK doesn't support passing messages directly, we format the
+ * history as context in the prompt.
+ */
+function buildPromptWithHistory(currentPrompt: string, messages?: ConversationMessage[]): string {
+  if (!messages || messages.length === 0) {
+    return currentPrompt
+  }
+
+  const historyParts: string[] = []
+
+  for (const msg of messages) {
+    const role = msg.role === 'user' ? 'User' : 'Assistant'
+
+    if (typeof msg.content === 'string') {
+      historyParts.push(`${role}: ${msg.content}`)
+    } else if (Array.isArray(msg.content)) {
+      const contentParts: string[] = []
+      for (const block of msg.content) {
+        if (block.type === 'text' && block.text) {
+          contentParts.push(block.text)
+        } else if (block.type === 'tool_use') {
+          contentParts.push(`[Used tool: ${block.name}]`)
+        } else if (block.type === 'tool_result') {
+          const resultPreview = block.content && block.content.length > 200
+            ? block.content.substring(0, 200) + '...'
+            : block.content ?? ''
+          contentParts.push(`[Tool result: ${resultPreview}]`)
+        }
+      }
+      if (contentParts.length > 0) {
+        historyParts.push(`${role}: ${contentParts.join('\n')}`)
+      }
+    }
+  }
+
+  if (historyParts.length === 0) {
+    return currentPrompt
+  }
+
+  return `<conversation_history>
+${historyParts.join('\n\n')}
+</conversation_history>
+
+Continue the conversation. The user's new message is:
+${currentPrompt}`
 }

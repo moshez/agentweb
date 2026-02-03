@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import type { SDKMessage, QueryOptions, ConnectionStatus, Session, SessionSummary } from '../lib/types'
+import type { SDKMessage, QueryOptions, ConnectionStatus, Session, SessionSummary, ConversationMessage, ConversationContentBlock } from '../lib/types'
 
 interface UseWebSocketReturn {
   messages: SDKMessage[]
@@ -28,6 +28,94 @@ function generateSessionName(messages: SDKMessage[]): string {
     return content.length > 50 ? content.substring(0, 47) + '...' : content
   }
   return 'New Session'
+}
+
+/**
+ * Convert SDK messages to conversation format for multi-turn support.
+ * Groups consecutive assistant messages and tool results appropriately.
+ */
+function convertToConversationMessages(messages: SDKMessage[]): ConversationMessage[] {
+  const result: ConversationMessage[] = []
+  let currentAssistantBlocks: ConversationContentBlock[] = []
+  let currentToolResults: ConversationContentBlock[] = []
+
+  const flushAssistant = () => {
+    if (currentAssistantBlocks.length > 0) {
+      result.push({
+        role: 'assistant',
+        content: currentAssistantBlocks,
+      })
+      currentAssistantBlocks = []
+    }
+  }
+
+  const flushToolResults = () => {
+    if (currentToolResults.length > 0) {
+      result.push({
+        role: 'user',
+        content: currentToolResults,
+      })
+      currentToolResults = []
+    }
+  }
+
+  for (const msg of messages) {
+    switch (msg.type) {
+      case 'user':
+        // Flush any pending assistant/tool messages
+        flushAssistant()
+        flushToolResults()
+        result.push({
+          role: 'user',
+          content: msg.content,
+        })
+        break
+
+      case 'text':
+        // Flush tool results before adding assistant text
+        flushToolResults()
+        currentAssistantBlocks.push({
+          type: 'text',
+          text: msg.content,
+        })
+        break
+
+      case 'tool_use':
+        // Flush tool results before adding tool use
+        flushToolResults()
+        currentAssistantBlocks.push({
+          type: 'tool_use',
+          id: msg.id,
+          name: msg.name,
+          input: msg.input,
+        })
+        break
+
+      case 'tool_result':
+        // Flush assistant blocks before adding tool results
+        flushAssistant()
+        currentToolResults.push({
+          type: 'tool_result',
+          tool_use_id: msg.tool_use_id,
+          content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+          is_error: msg.is_error,
+        })
+        break
+
+      // Skip system messages (start, end, error, thinking)
+      case 'start':
+      case 'end':
+      case 'error':
+      case 'thinking':
+        break
+    }
+  }
+
+  // Flush any remaining blocks
+  flushAssistant()
+  flushToolResults()
+
+  return result
 }
 
 export function useWebSocket(url: string): UseWebSocketReturn {
@@ -192,14 +280,22 @@ export function useWebSocket(url: string): UseWebSocketReturn {
         type: 'user',
         content: prompt,
       }
+
+      // Convert existing messages to conversation format for multi-turn
+      const conversationHistory = convertToConversationMessages(messages)
+
       setMessages((prev) => [...prev, userMessage])
 
-      const request = { prompt, options }
+      const request = {
+        prompt,
+        options,
+        messages: conversationHistory,
+      }
       wsRef.current.send(JSON.stringify(request))
     } else {
       console.error('WebSocket is not connected')
     }
-  }, [])
+  }, [messages])
 
   const stop = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
