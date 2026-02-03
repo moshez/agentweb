@@ -11,7 +11,7 @@ module.exports = {
     'plugin:@typescript-eslint/recommended-requiring-type-checking',
     'plugin:react-hooks/recommended',
   ],
-  ignorePatterns: ['dist', 'dist-server', '.eslintrc.cjs', 'vite.config.ts'],
+  ignorePatterns: ['dist', 'dist-server', '.eslintrc.cjs', 'vite.config.ts', 'vite.config.d.ts', 'server/embedded-assets.ts'],
   parser: '@typescript-eslint/parser',
   parserOptions: {
     ecmaVersion: 'latest',

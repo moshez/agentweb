@@ -118,4 +118,4 @@ export function getIndexHtml(): EmbeddedAsset | undefined {
   console.log(`\nGenerated ${OUTPUT_FILE}`)
 }
 
-main()
+void main()

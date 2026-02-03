@@ -33,7 +33,7 @@ if (isCompiledBinary) {
       let assetPath = req.path
       if (assetPath === '/') assetPath = '/index.html'
 
-      const asset = embeddedAssets!.getAsset(assetPath)
+      const asset = embeddedAssets.getAsset(assetPath)
       if (asset) {
         const isBase64 = asset.contentType.includes(';base64')
         const contentType = isBase64
@@ -47,7 +47,7 @@ if (isCompiledBinary) {
         }
       } else {
         // SPA fallback - serve index.html for unknown routes
-        const indexAsset = embeddedAssets!.getIndexHtml()
+        const indexAsset = embeddedAssets.getIndexHtml()
         if (indexAsset) {
           res.setHeader('Content-Type', 'text/html; charset=utf-8')
           res.send(indexAsset.content)
