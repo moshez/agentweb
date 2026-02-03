@@ -1,12 +1,9 @@
-name: Release
+name: Build
 
 on:
   push:
     branches:
       - main
-
-permissions:
-  contents: write
 
 jobs:
   build:
@@ -40,7 +37,8 @@ jobs:
       - name: Build for Windows x64
         run: bun build server/server.ts --compile --minify --sourcemap --target=bun-windows-x64 --outfile=dist/agentweb-windows-x64.exe
 
-      - name: Upload Release Assets
-        uses: softprops/action-gh-release@v2
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          files: dist/*
+          name: agentweb-binaries
+          path: dist/*
