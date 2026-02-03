@@ -16,10 +16,11 @@ const firstArg = process.argv[2]
 if (firstArg && firstArg.endsWith('.js') && existsSync(firstArg)) {
   // We're being asked to run a JavaScript file
   // Import and run it - this works because Bun's runtime is embedded in the binary
-  console.log(`Running script: ${firstArg}`)
+  // NOTE: Don't log anything here - the CLI uses stdout for JSON protocol
   try {
     await import(path.resolve(firstArg))
   } catch (err) {
+    // Log errors to stderr only
     console.error('Failed to run script:', err)
     process.exit(1)
   }

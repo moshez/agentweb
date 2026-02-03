@@ -202,7 +202,8 @@ function setupSelfAsRuntime(): void {
       unlinkSync(bunLink)
     }
     symlinkSync(execPath, bunLink)
-    console.log(`Created runtime symlink: ${bunLink} -> ${execPath}`)
+    // NOTE: Don't log to stdout - CLI uses it for JSON protocol
+    // console.log(`Created runtime symlink: ${bunLink} -> ${execPath}`)
   } catch (error) {
     console.error('Failed to set up self as runtime:', error)
   }
