@@ -13,6 +13,28 @@ A web interface for the Claude Agent SDK. Provides a browser-based UI for intera
 
 ## Installation
 
+### Pre-built Binaries
+
+Download pre-built binaries from [GitHub Actions artifacts](../../actions/workflows/build.yml). Available platforms:
+- `agentweb-linux-x64` - Linux (x64)
+- `agentweb-linux-arm64` - Linux (ARM64)
+- `agentweb-darwin-x64` - macOS (Intel)
+- `agentweb-darwin-arm64` - macOS (Apple Silicon)
+- `agentweb-windows-x64.exe` - Windows (x64)
+
+#### macOS: Removing Quarantine
+
+macOS blocks unsigned binaries downloaded from the internet. After downloading, run:
+
+```bash
+xattr -cr ~/Downloads/agentweb-darwin-arm64
+chmod +x ~/Downloads/agentweb-darwin-arm64
+```
+
+Then you can run it normally.
+
+### From Source
+
 ```bash
 npm install
 ```
