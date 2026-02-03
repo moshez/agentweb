@@ -27,6 +27,13 @@ export async function handleQuery(
     const executable = getJsRuntime()
     const env = getRuntimeEnv()
 
+    // Log configuration for debugging
+    console.log('SDK Configuration:', {
+      pathToClaudeCodeExecutable,
+      executable,
+      pathModified: env.PATH !== process.env.PATH,
+    })
+
     // Call the Claude Agent SDK
     for await (const message of query({
       prompt: request.prompt,
@@ -47,6 +54,9 @@ export async function handleQuery(
         executable,
       },
     })) {
+      // Log raw SDK messages for debugging
+      console.log('SDK Message:', JSON.stringify(message, null, 2))
+
       // Transform SDK messages into frontend format
       const frontendMessages = transformSDKMessage(message as SDKIncomingMessage)
       for (const msg of frontendMessages) {
@@ -60,6 +70,12 @@ export async function handleQuery(
       stop_reason: 'end_turn',
     })
   } catch (error) {
+    // Log full error details for debugging
+    console.error('SDK Error:', error)
+    if (error instanceof Error) {
+      console.error('Error stack:', error.stack)
+    }
+
     onMessage({
       type: 'error',
       error: error instanceof Error ? error.message : 'Unknown error',
