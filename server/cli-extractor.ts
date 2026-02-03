@@ -6,10 +6,14 @@
  * filesystem, so we need to extract the CLI to a real file on disk.
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, symlinkSync, unlinkSync } from 'fs'
 import { tmpdir } from 'os'
 import path from 'path'
 import { createHash } from 'crypto'
+import { execSync } from 'child_process'
+
+// Cache for the bin directory containing our runtime symlink
+let runtimeBinDir: string | undefined
 
 // Cache the extracted path to avoid re-extracting on every query
 let extractedCliPath: string | undefined
@@ -147,4 +151,105 @@ function resolveSdkCliPath(): string | undefined {
 export function cleanupExtractedCli(): void {
   // Cleanup is optional - temp files will be cleaned up by OS eventually
   // We keep them around for reuse between restarts
+}
+
+// Cache detected runtime
+let detectedRuntime: 'node' | 'bun' | undefined
+let usingSelfAsRuntime = false
+
+/**
+ * Detect available JavaScript runtime for executing CLI
+ *
+ * When running as a compiled Bun binary, we need to explicitly specify
+ * which runtime to use for spawning the extracted CLI script, since the
+ * SDK's auto-detection may fail in this context.
+ *
+ * If no system runtime is available, the compiled binary can act as its
+ * own runtime since Bun binaries can execute JavaScript files.
+ */
+export function getJsRuntime(): 'node' | 'bun' | undefined {
+  // Return cached result if available
+  if (detectedRuntime !== undefined) {
+    return detectedRuntime
+  }
+
+  // Not a compiled binary - let SDK auto-detect
+  if (!isCompiledBinary()) {
+    return undefined
+  }
+
+  // Check for bun first (preferred since we're a Bun binary)
+  try {
+    execSync('bun --version', { stdio: 'ignore' })
+    detectedRuntime = 'bun'
+    console.log('Detected bun runtime for CLI execution')
+    return detectedRuntime
+  } catch {
+    // bun not available in PATH
+  }
+
+  // Fall back to node
+  try {
+    execSync('node --version', { stdio: 'ignore' })
+    detectedRuntime = 'node'
+    console.log('Detected node runtime for CLI execution')
+    return detectedRuntime
+  } catch {
+    // node not available in PATH
+  }
+
+  // No system runtime available - use self as runtime
+  // Bun compiled binaries can execute JS files directly
+  console.log('No system runtime found, using compiled binary as runtime')
+  setupSelfAsRuntime()
+  detectedRuntime = 'bun'
+  usingSelfAsRuntime = true
+  return detectedRuntime
+}
+
+/**
+ * Set up the compiled binary to act as its own runtime.
+ * Creates a symlink named 'bun' pointing to our executable.
+ */
+function setupSelfAsRuntime(): void {
+  if (runtimeBinDir) {
+    return // Already set up
+  }
+
+  try {
+    // Get path to our executable
+    const execPath = process.execPath
+
+    // Create temp bin directory
+    runtimeBinDir = path.join(tmpdir(), 'agentweb-bin')
+    if (!existsSync(runtimeBinDir)) {
+      mkdirSync(runtimeBinDir, { recursive: true })
+    }
+
+    // Create symlink: bun -> our executable
+    const bunLink = path.join(runtimeBinDir, 'bun')
+    if (existsSync(bunLink)) {
+      unlinkSync(bunLink)
+    }
+    symlinkSync(execPath, bunLink)
+    console.log(`Created runtime symlink: ${bunLink} -> ${execPath}`)
+  } catch (error) {
+    console.error('Failed to set up self as runtime:', error)
+  }
+}
+
+/**
+ * Get environment variables for SDK execution.
+ * If using self as runtime, prepends our bin directory to PATH.
+ */
+export function getRuntimeEnv(): Record<string, string> {
+  const env = { ...process.env } as Record<string, string>
+
+  if (usingSelfAsRuntime && runtimeBinDir) {
+    // Prepend our bin directory to PATH so SDK finds our 'bun' symlink
+    const currentPath = env.PATH || ''
+    env.PATH = `${runtimeBinDir}${path.delimiter}${currentPath}`
+  }
+
+  return env
 }

@@ -1,6 +1,6 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { QueryRequest, SDKMessage, ErrorMessage, SDKIncomingMessage, SDKContentBlock } from './types.js'
-import { getClaudeCodeCliPath } from './cli-extractor.js'
+import { getClaudeCodeCliPath, getJsRuntime, getRuntimeEnv } from './cli-extractor.js'
 
 /**
  * Query handler that integrates with the Claude Agent SDK.
@@ -22,8 +22,10 @@ export async function handleQuery(
   })
 
   try {
-    // Get the CLI path (needed for compiled Bun binaries)
+    // Get the CLI path, runtime, and env (needed for compiled Bun binaries)
     const pathToClaudeCodeExecutable = getClaudeCodeCliPath()
+    const executable = getJsRuntime()
+    const env = getRuntimeEnv()
 
     // Call the Claude Agent SDK
     for await (const message of query({
@@ -38,9 +40,11 @@ export async function handleQuery(
         // Enable common tools
         allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch'],
         // Pass through environment variables (including ANTHROPIC_API_KEY)
-        env: process.env as Record<string, string>,
-        // For compiled Bun binaries, use the extracted CLI path
+        // For compiled binaries, this includes a modified PATH to find our runtime
+        env,
+        // For compiled Bun binaries, use the extracted CLI path and specify runtime
         pathToClaudeCodeExecutable,
+        executable,
       },
     })) {
       // Transform SDK messages into frontend format
