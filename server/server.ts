@@ -4,8 +4,8 @@ import { createServer } from 'http'
 import path from 'path'
 import { existsSync } from 'fs'
 import { fileURLToPath } from 'url'
-import type { QueryRequest, ErrorMessage, Session } from './types.js'
-import { handleQuery, type QueryController } from './query-handler.js'
+import type { ErrorMessage, Session } from './types.js'
+import { createSession, resumeSession, type SessionController } from './query-handler.js'
 import { listSessions, getSession, saveSession, deleteSession } from './session-manager.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -168,69 +168,146 @@ const server = createServer(app)
 // WebSocket server for Agent SDK streaming
 const wss = new WebSocketServer({ server })
 
-// Track active query controllers per connection
-const activeControllers = new Map<WebSocket, QueryController>()
+// Message types from client
+interface ClientMessage {
+  type: 'create_session' | 'resume_session' | 'send_message' | 'stop'
+  prompt?: string
+  sdkSessionId?: string
+  options?: { model?: string }
+}
+
+// Track active SDK sessions per WebSocket connection
+const activeSessions = new Map<WebSocket, SessionController>()
 
 wss.on('connection', (ws: WebSocket) => {
   console.log('Client connected')
 
+  const sendToClient = (msg: unknown) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(msg))
+    }
+  }
+
   ws.on('message', (data: Buffer) => {
     void (async () => {
       try {
-        const message = JSON.parse(data.toString()) as QueryRequest | { type: 'stop' }
+        const message = JSON.parse(data.toString()) as ClientMessage
 
-        // Handle stop request
-        if ('type' in message && message.type === 'stop') {
-          const controller = activeControllers.get(ws)
-          if (controller) {
-            controller.abort()
-            activeControllers.delete(ws)
+        switch (message.type) {
+          case 'create_session': {
+            // Close existing session if any
+            const existing = activeSessions.get(ws)
+            if (existing) {
+              existing.close()
+            }
+
+            // Create new SDK session
+            const controller = createSession(sendToClient, message.options)
+            activeSessions.set(ws, controller)
+
+            // Send session created confirmation with SDK session ID
+            // Note: sessionId may not be available immediately, it's set after first message
+            sendToClient({
+              type: 'session_created',
+              // Session ID will be sent with first 'start' message
+            })
+            break
           }
-          return
+
+          case 'resume_session': {
+            if (!message.sdkSessionId) {
+              sendToClient({
+                type: 'error',
+                error: 'Missing sdkSessionId for resume',
+              })
+              return
+            }
+
+            // Close existing session if any
+            const existing = activeSessions.get(ws)
+            if (existing) {
+              existing.close()
+            }
+
+            // Resume existing SDK session
+            const controller = resumeSession(
+              message.sdkSessionId,
+              sendToClient,
+              message.options
+            )
+            activeSessions.set(ws, controller)
+
+            sendToClient({
+              type: 'session_resumed',
+              sdkSessionId: message.sdkSessionId,
+            })
+            break
+          }
+
+          case 'send_message': {
+            if (!message.prompt) {
+              const error: ErrorMessage = {
+                type: 'error',
+                error: 'Missing required field: prompt',
+              }
+              sendToClient(error)
+              return
+            }
+
+            let controller = activeSessions.get(ws)
+
+            // Auto-create session if none exists
+            if (!controller) {
+              controller = createSession(sendToClient, message.options)
+              activeSessions.set(ws, controller)
+            }
+
+            // Send message to the session
+            await controller.sendMessage(message.prompt)
+            break
+          }
+
+          case 'stop': {
+            const controller = activeSessions.get(ws)
+            if (controller) {
+              controller.close()
+              activeSessions.delete(ws)
+            }
+            sendToClient({
+              type: 'end',
+              stop_reason: 'user_stopped',
+            })
+            break
+          }
+
+          default:
+            // Legacy support: treat as send_message if has prompt
+            if ('prompt' in message && message.prompt) {
+              let controller = activeSessions.get(ws)
+              if (!controller) {
+                controller = createSession(sendToClient)
+                activeSessions.set(ws, controller)
+              }
+              await controller.sendMessage(message.prompt)
+            }
         }
-
-        const request = message as QueryRequest
-
-        if (!request.prompt) {
-          const error: ErrorMessage = {
-            type: 'error',
-            error: 'Missing required field: prompt',
-          }
-          ws.send(JSON.stringify(error))
-          return
-        }
-
-        const controller = handleQuery(request, (msg) => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify(msg))
-          }
-        })
-
-        activeControllers.set(ws, controller)
-
-        // Wait for the query to complete
-        await controller.promise
-
-        activeControllers.delete(ws)
       } catch (error) {
         const errorMessage: ErrorMessage = {
           type: 'error',
           error: error instanceof Error ? error.message : 'Unknown error',
         }
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify(errorMessage))
-        }
+        sendToClient(errorMessage)
       }
     })()
   })
 
   ws.on('close', () => {
     console.log('Client disconnected')
-    // Abort any active query when client disconnects
-    const controller = activeControllers.get(ws)
+    // Close SDK session when client disconnects
+    const controller = activeSessions.get(ws)
     if (controller) {
-      controller.abort()
-      activeControllers.delete(ws)
+      controller.close()
+      activeSessions.delete(ws)
     }
   })
 

@@ -56,6 +56,19 @@ export interface UserMessage {
   content: string
 }
 
+/**
+ * Internal session management messages (not displayed in UI)
+ */
+export interface SessionCreatedMessage {
+  type: 'session_created'
+  sdkSessionId: string
+}
+
+export interface SessionResumedMessage {
+  type: 'session_resumed'
+  sdkSessionId: string
+}
+
 export type SDKMessage =
   | TextMessage
   | ToolUseMessage
@@ -65,6 +78,8 @@ export type SDKMessage =
   | StartMessage
   | EndMessage
   | UserMessage
+  | SessionCreatedMessage
+  | SessionResumedMessage
 
 export interface QueryRequest {
   prompt: string
@@ -106,6 +121,7 @@ export interface Session {
   createdAt: string
   updatedAt: string
   messages: SDKMessage[]
+  sdkSessionId?: string
 }
 
 export interface SessionSummary {

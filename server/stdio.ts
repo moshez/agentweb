@@ -1,6 +1,6 @@
 import * as readline from 'readline'
 import type { QueryRequest, ErrorMessage } from './types.js'
-import { handleQuery } from './query-handler.js'
+import { createSession, type SessionController } from './query-handler.js'
 
 /**
  * Stdio mode for programmatic use.
@@ -20,6 +20,9 @@ function sendMessage(message: unknown): void {
   process.stdout.write(JSON.stringify(message) + '\n')
 }
 
+// Keep track of the current session for multi-turn conversations
+let currentSession: SessionController | null = null
+
 rl.on('line', (line: string) => {
   void (async () => {
     if (!line.trim()) {
@@ -38,8 +41,16 @@ rl.on('line', (line: string) => {
         return
       }
 
-      const controller = handleQuery(request, sendMessage)
-      await controller.promise
+      // Create a new session if we don't have one
+      if (!currentSession) {
+        currentSession = createSession(sendMessage, {
+          model: request.options?.model,
+          systemPrompt: request.options?.systemPrompt,
+        })
+      }
+
+      // Send the message
+      await currentSession.sendMessage(request.prompt)
     } catch (error) {
       const errorMessage: ErrorMessage = {
         type: 'error',
@@ -51,6 +62,9 @@ rl.on('line', (line: string) => {
 })
 
 rl.on('close', () => {
+  if (currentSession) {
+    currentSession.close()
+  }
   process.exit(0)
 })
 

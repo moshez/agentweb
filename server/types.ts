@@ -82,6 +82,7 @@ export interface Session {
   createdAt: string
   updatedAt: string
   messages: SDKMessage[]
+  sdkSessionId?: string
 }
 
 export interface SessionSummary {

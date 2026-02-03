@@ -1,134 +1,165 @@
-import { query } from '@anthropic-ai/claude-agent-sdk'
-import type { QueryRequest, SDKMessage, ErrorMessage, SDKIncomingMessage, SDKContentBlock, ConversationMessage } from './types.js'
+import {
+  unstable_v2_createSession,
+  unstable_v2_resumeSession,
+  type SDKSession,
+  type SDKSessionOptions,
+} from '@anthropic-ai/claude-agent-sdk'
+import type { SDKMessage, ErrorMessage, SDKIncomingMessage, SDKContentBlock } from './types.js'
 import { getClaudeCodeCliPath, getJsRuntime, getRuntimeEnv } from './cli-extractor.js'
 
 /**
- * Query handler that integrates with the Claude Agent SDK.
- * Transforms SDK messages into the format expected by the frontend.
+ * Session-based query handler using the V2 SDK API.
+ * Supports multi-turn conversations within a session.
  */
 
 export type MessageCallback = (message: SDKMessage | ErrorMessage) => void
 
-export interface QueryController {
-  abort: () => void
-  promise: Promise<void>
+export interface SessionController {
+  session: SDKSession
+  sendMessage: (prompt: string) => Promise<void>
+  close: () => void
 }
 
-export function handleQuery(
-  request: QueryRequest,
-  onMessage: MessageCallback
-): QueryController {
-  const abortController = new AbortController()
-  let resolvePromise: () => void
-  let rejectPromise: (error: Error) => void
+/**
+ * Create a new SDK session for multi-turn conversations.
+ */
+export function createSession(
+  onMessage: MessageCallback,
+  options?: { model?: string; systemPrompt?: string }
+): SessionController {
+  // Get the CLI path, runtime, and env (needed for compiled Bun binaries)
+  const pathToClaudeCodeExecutable = getClaudeCodeCliPath()
+  const executable = getJsRuntime()
+  const env = getRuntimeEnv()
 
-  const promise = new Promise<void>((resolve, reject) => {
-    resolvePromise = resolve
-    rejectPromise = reject
+  // Log configuration for debugging
+  console.log('Creating SDK Session with config:', {
+    pathToClaudeCodeExecutable,
+    executable,
+    pathModified: env.PATH !== process.env.PATH,
+    model: options?.model || 'claude-sonnet-4-20250514',
   })
 
-  const runQuery = async () => {
-    const sessionId = generateSessionId()
+  const sessionOptions: SDKSessionOptions = {
+    model: options?.model || 'claude-sonnet-4-20250514',
+    pathToClaudeCodeExecutable,
+    executable,
+    env,
+    allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch'],
+  }
 
-    // Send start message
-    onMessage({
-      type: 'start',
-      session_id: sessionId,
-    })
+  const session = unstable_v2_createSession(sessionOptions)
 
+  // Start streaming messages in the background
+  void streamMessages(session, onMessage)
+
+  const sendMessage = async (prompt: string): Promise<void> => {
     try {
-      // Get the CLI path, runtime, and env (needed for compiled Bun binaries)
-      const pathToClaudeCodeExecutable = getClaudeCodeCliPath()
-      const executable = getJsRuntime()
-      const env = getRuntimeEnv()
-
-      // Log configuration for debugging
-      console.log('SDK Configuration:', {
-        pathToClaudeCodeExecutable,
-        executable,
-        pathModified: env.PATH !== process.env.PATH,
-      })
-
-      // Build prompt with conversation history for multi-turn support
-      const promptWithHistory = buildPromptWithHistory(request.prompt, request.messages)
-
-      // Call the Claude Agent SDK
-      for await (const message of query({
-        prompt: promptWithHistory,
-        options: {
-          model: request.options?.model,
-          systemPrompt: request.options?.systemPrompt,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment -- SDK expects specific McpServerConfig type
-          mcpServers: request.options?.mcpServers as any,
-          // Use acceptEdits mode to auto-approve file edits
-          permissionMode: 'acceptEdits',
-          // Enable common tools
-          allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch'],
-          // Pass through environment variables (including ANTHROPIC_API_KEY)
-          // For compiled binaries, this includes a modified PATH to find our runtime
-          env,
-          // For compiled Bun binaries, use the extracted CLI path and specify runtime
-          pathToClaudeCodeExecutable,
-          executable,
-        },
-      })) {
-        // Check if aborted
-        if (abortController.signal.aborted) {
-          onMessage({
-            type: 'end',
-            stop_reason: 'user_stopped',
-          })
-          resolvePromise()
-          return
-        }
-
-        // Log raw SDK messages for debugging
-        console.log('SDK Message:', JSON.stringify(message, null, 2))
-
-        // Transform SDK messages into frontend format
-        const frontendMessages = transformSDKMessage(message as SDKIncomingMessage)
-        for (const msg of frontendMessages) {
-          onMessage(msg)
-        }
-      }
-
-      // Send end message
+      // Send start message
       onMessage({
-        type: 'end',
-        stop_reason: 'end_turn',
+        type: 'start',
+        session_id: session.sessionId,
       })
-      resolvePromise()
+
+      await session.send(prompt)
     } catch (error) {
-      // Check if this was an abort
-      if (abortController.signal.aborted) {
-        onMessage({
-          type: 'end',
-          stop_reason: 'user_stopped',
-        })
-        resolvePromise()
-        return
-      }
-
-      // Log full error details for debugging
-      console.error('SDK Error:', error)
-      if (error instanceof Error) {
-        console.error('Error stack:', error.stack)
-      }
-
+      console.error('Error sending message:', error)
       onMessage({
         type: 'error',
         error: error instanceof Error ? error.message : 'Unknown error',
       })
-      rejectPromise(error instanceof Error ? error : new Error('Unknown error'))
     }
   }
 
-  // Start the query asynchronously
-  void runQuery()
+  return {
+    session,
+    sendMessage,
+    close: () => session.close(),
+  }
+}
+
+/**
+ * Resume an existing SDK session by ID.
+ */
+export function resumeSession(
+  sessionId: string,
+  onMessage: MessageCallback,
+  options?: { model?: string }
+): SessionController {
+  const pathToClaudeCodeExecutable = getClaudeCodeCliPath()
+  const executable = getJsRuntime()
+  const env = getRuntimeEnv()
+
+  console.log('Resuming SDK Session:', sessionId)
+
+  const sessionOptions: SDKSessionOptions = {
+    model: options?.model || 'claude-sonnet-4-20250514',
+    pathToClaudeCodeExecutable,
+    executable,
+    env,
+    allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch'],
+  }
+
+  const session = unstable_v2_resumeSession(sessionId, sessionOptions)
+
+  // Start streaming messages in the background
+  void streamMessages(session, onMessage)
+
+  const sendMessage = async (prompt: string): Promise<void> => {
+    try {
+      onMessage({
+        type: 'start',
+        session_id: session.sessionId,
+      })
+
+      await session.send(prompt)
+    } catch (error) {
+      console.error('Error sending message:', error)
+      onMessage({
+        type: 'error',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  }
 
   return {
-    abort: () => abortController.abort(),
-    promise,
+    session,
+    sendMessage,
+    close: () => session.close(),
+  }
+}
+
+/**
+ * Stream messages from the session and forward to the callback.
+ */
+async function streamMessages(
+  session: SDKSession,
+  onMessage: MessageCallback
+): Promise<void> {
+  try {
+    for await (const message of session.stream()) {
+      console.log('SDK Message:', JSON.stringify(message, null, 2))
+
+      // Transform SDK messages into frontend format
+      const frontendMessages = transformSDKMessage(message as SDKIncomingMessage)
+      for (const msg of frontendMessages) {
+        onMessage(msg)
+      }
+
+      // Check for end of turn
+      if (message.type === 'result') {
+        onMessage({
+          type: 'end',
+          stop_reason: 'end_turn',
+        })
+      }
+    }
+  } catch (error) {
+    console.error('Stream error:', error)
+    onMessage({
+      type: 'error',
+      error: error instanceof Error ? error.message : 'Stream error',
+    })
   }
 }
 
@@ -237,57 +268,4 @@ function transformSDKMessage(message: SDKIncomingMessage): SDKMessage[] {
   }
 
   return messages
-}
-
-function generateSessionId(): string {
-  return `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
-}
-
-/**
- * Build a prompt that includes conversation history for multi-turn support.
- * Since the SDK doesn't support passing messages directly, we format the
- * history as context in the prompt.
- */
-function buildPromptWithHistory(currentPrompt: string, messages?: ConversationMessage[]): string {
-  if (!messages || messages.length === 0) {
-    return currentPrompt
-  }
-
-  const historyParts: string[] = []
-
-  for (const msg of messages) {
-    const role = msg.role === 'user' ? 'User' : 'Assistant'
-
-    if (typeof msg.content === 'string') {
-      historyParts.push(`${role}: ${msg.content}`)
-    } else if (Array.isArray(msg.content)) {
-      const contentParts: string[] = []
-      for (const block of msg.content) {
-        if (block.type === 'text' && block.text) {
-          contentParts.push(block.text)
-        } else if (block.type === 'tool_use') {
-          contentParts.push(`[Used tool: ${block.name}]`)
-        } else if (block.type === 'tool_result') {
-          const resultPreview = block.content && block.content.length > 200
-            ? block.content.substring(0, 200) + '...'
-            : block.content ?? ''
-          contentParts.push(`[Tool result: ${resultPreview}]`)
-        }
-      }
-      if (contentParts.length > 0) {
-        historyParts.push(`${role}: ${contentParts.join('\n')}`)
-      }
-    }
-  }
-
-  if (historyParts.length === 0) {
-    return currentPrompt
-  }
-
-  return `<conversation_history>
-${historyParts.join('\n\n')}
-</conversation_history>
-
-Continue the conversation. The user's new message is:
-${currentPrompt}`
 }
