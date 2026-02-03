@@ -27,7 +27,8 @@ export async function handleQuery(
       options: {
         model: request.options?.model,
         systemPrompt: request.options?.systemPrompt,
-        mcpServers: request.options?.mcpServers,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment -- SDK expects specific McpServerConfig type
+        mcpServers: request.options?.mcpServers as any,
         // Use acceptEdits mode to auto-approve file edits
         permissionMode: 'acceptEdits',
         // Enable common tools
