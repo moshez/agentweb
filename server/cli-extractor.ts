@@ -10,7 +10,6 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, symlinkS
 import { tmpdir } from 'os'
 import path from 'path'
 import { createHash } from 'crypto'
-import { execSync } from 'child_process'
 
 // Cache for the bin directory containing our runtime symlink
 let runtimeBinDir: string | undefined
@@ -153,58 +152,29 @@ export function cleanupExtractedCli(): void {
   // We keep them around for reuse between restarts
 }
 
-// Cache detected runtime
-let detectedRuntime: 'node' | 'bun' | undefined
+// Track whether we've set up self as runtime
 let usingSelfAsRuntime = false
 
 /**
- * Detect available JavaScript runtime for executing CLI
+ * Get the JavaScript runtime for executing CLI
  *
- * When running as a compiled Bun binary, we need to explicitly specify
- * which runtime to use for spawning the extracted CLI script, since the
- * SDK's auto-detection may fail in this context.
- *
- * If no system runtime is available, the compiled binary can act as its
- * own runtime since Bun binaries can execute JavaScript files.
+ * When running as a compiled Bun binary, we always use the binary itself
+ * as the runtime to ensure consistent behavior regardless of what's
+ * installed on the user's system.
  */
 export function getJsRuntime(): 'node' | 'bun' | undefined {
-  // Return cached result if available
-  if (detectedRuntime !== undefined) {
-    return detectedRuntime
-  }
-
   // Not a compiled binary - let SDK auto-detect
   if (!isCompiledBinary()) {
     return undefined
   }
 
-  // Check for bun first (preferred since we're a Bun binary)
-  try {
-    execSync('bun --version', { stdio: 'ignore' })
-    detectedRuntime = 'bun'
-    console.log('Detected bun runtime for CLI execution')
-    return detectedRuntime
-  } catch {
-    // bun not available in PATH
+  // Always use self as runtime for compiled binaries
+  // This ensures consistent behavior regardless of system node/bun versions
+  if (!usingSelfAsRuntime) {
+    setupSelfAsRuntime()
+    usingSelfAsRuntime = true
   }
-
-  // Fall back to node
-  try {
-    execSync('node --version', { stdio: 'ignore' })
-    detectedRuntime = 'node'
-    console.log('Detected node runtime for CLI execution')
-    return detectedRuntime
-  } catch {
-    // node not available in PATH
-  }
-
-  // No system runtime available - use self as runtime
-  // Bun compiled binaries can execute JS files directly
-  console.log('No system runtime found, using compiled binary as runtime')
-  setupSelfAsRuntime()
-  detectedRuntime = 'bun'
-  usingSelfAsRuntime = true
-  return detectedRuntime
+  return 'bun'
 }
 
 /**
