@@ -19,26 +19,32 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Create dist directory
-        run: mkdir -p dist
+      - name: Build client
+        run: bun run build
+
+      - name: Embed client assets
+        run: bun server/embed-assets.ts
+
+      - name: Create output directory
+        run: mkdir -p dist-binaries
 
       - name: Build for Linux x64
-        run: bun build server/server.ts --compile --minify --sourcemap --target=bun-linux-x64 --outfile=dist/agentweb-linux-x64
+        run: bun build server/server.ts --compile --minify --sourcemap --target=bun-linux-x64 --outfile=dist-binaries/agentweb-linux-x64
 
       - name: Build for Linux ARM64
-        run: bun build server/server.ts --compile --minify --sourcemap --target=bun-linux-arm64 --outfile=dist/agentweb-linux-arm64
+        run: bun build server/server.ts --compile --minify --sourcemap --target=bun-linux-arm64 --outfile=dist-binaries/agentweb-linux-arm64
 
       - name: Build for macOS x64
-        run: bun build server/server.ts --compile --minify --sourcemap --target=bun-darwin-x64 --outfile=dist/agentweb-darwin-x64
+        run: bun build server/server.ts --compile --minify --sourcemap --target=bun-darwin-x64 --outfile=dist-binaries/agentweb-darwin-x64
 
       - name: Build for macOS ARM64
-        run: bun build server/server.ts --compile --minify --sourcemap --target=bun-darwin-arm64 --outfile=dist/agentweb-darwin-arm64
+        run: bun build server/server.ts --compile --minify --sourcemap --target=bun-darwin-arm64 --outfile=dist-binaries/agentweb-darwin-arm64
 
       - name: Build for Windows x64
-        run: bun build server/server.ts --compile --minify --sourcemap --target=bun-windows-x64 --outfile=dist/agentweb-windows-x64.exe
+        run: bun build server/server.ts --compile --minify --sourcemap --target=bun-windows-x64 --outfile=dist-binaries/agentweb-windows-x64.exe
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: agentweb-binaries
-          path: dist/*
+          path: dist-binaries/*
