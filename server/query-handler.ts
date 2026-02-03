@@ -125,12 +125,9 @@ function transformSDKMessage(message: any): SDKMessage[] {
 
     case 'result': {
       // Result messages indicate completion
-      if (message.subtype === 'success' && message.result) {
-        messages.push({
-          type: 'text',
-          content: message.result,
-        })
-      } else if (message.is_error && message.errors) {
+      // Note: Don't emit text for 'success' results - the final text is already
+      // included in the preceding 'assistant' message to avoid duplicates
+      if (message.is_error && message.errors) {
         for (const error of message.errors) {
           messages.push({
             type: 'error',

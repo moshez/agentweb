@@ -1,7 +1,42 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useMemo } from 'react'
 import type { SDKMessage } from '../lib/types'
 import { MessageRenderer } from './MessageRenderer'
+import { StepGroup } from './StepGroup'
 import './ConversationView.css'
+
+interface MessageGroup {
+  type: 'steps' | 'message'
+  items: SDKMessage[]
+}
+
+function isToolMessage(message: SDKMessage): boolean {
+  return message.type === 'tool_use' || message.type === 'tool_result'
+}
+
+function groupMessages(messages: SDKMessage[]): MessageGroup[] {
+  const groups: MessageGroup[] = []
+  let currentSteps: SDKMessage[] = []
+
+  for (const message of messages) {
+    if (isToolMessage(message)) {
+      currentSteps.push(message)
+    } else {
+      // Flush any accumulated steps
+      if (currentSteps.length > 0) {
+        groups.push({ type: 'steps', items: currentSteps })
+        currentSteps = []
+      }
+      groups.push({ type: 'message', items: [message] })
+    }
+  }
+
+  // Flush remaining steps
+  if (currentSteps.length > 0) {
+    groups.push({ type: 'steps', items: currentSteps })
+  }
+
+  return groups
+}
 
 interface ConversationViewProps {
   messages: SDKMessage[]
@@ -11,6 +46,9 @@ interface ConversationViewProps {
 export function ConversationView({ messages, isProcessing }: ConversationViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const shouldAutoScroll = useRef(true)
+
+  // Group consecutive tool messages together
+  const messageGroups = useMemo(() => groupMessages(messages), [messages])
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -45,8 +83,12 @@ export function ConversationView({ messages, isProcessing }: ConversationViewPro
       className="conversation-view"
       onScroll={handleScroll}
     >
-      {messages.map((message, index) => (
-        <MessageRenderer key={index} message={message} />
+      {messageGroups.map((group, index) => (
+        group.type === 'steps' ? (
+          <StepGroup key={index} steps={group.items} />
+        ) : (
+          <MessageRenderer key={index} message={group.items[0]} />
+        )
       ))}
       {isProcessing && (
         <div className="processing-indicator">
