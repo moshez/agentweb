@@ -1,6 +1,6 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { QueryRequest, SDKMessage, ErrorMessage, SDKIncomingMessage, SDKContentBlock } from './types.js'
-import { getClaudeCodeCliPath } from './cli-extractor.js'
+import { getClaudeCodeCliPath, getJsRuntime, getRuntimeEnv } from './cli-extractor.js'
 
 /**
  * Query handler that integrates with the Claude Agent SDK.
@@ -22,8 +22,17 @@ export async function handleQuery(
   })
 
   try {
-    // Get the CLI path (needed for compiled Bun binaries)
+    // Get the CLI path, runtime, and env (needed for compiled Bun binaries)
     const pathToClaudeCodeExecutable = getClaudeCodeCliPath()
+    const executable = getJsRuntime()
+    const env = getRuntimeEnv()
+
+    // Log configuration for debugging
+    console.log('SDK Configuration:', {
+      pathToClaudeCodeExecutable,
+      executable,
+      pathModified: env.PATH !== process.env.PATH,
+    })
 
     // Call the Claude Agent SDK
     for await (const message of query({
@@ -38,11 +47,16 @@ export async function handleQuery(
         // Enable common tools
         allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch'],
         // Pass through environment variables (including ANTHROPIC_API_KEY)
-        env: process.env as Record<string, string>,
-        // For compiled Bun binaries, use the extracted CLI path
+        // For compiled binaries, this includes a modified PATH to find our runtime
+        env,
+        // For compiled Bun binaries, use the extracted CLI path and specify runtime
         pathToClaudeCodeExecutable,
+        executable,
       },
     })) {
+      // Log raw SDK messages for debugging
+      console.log('SDK Message:', JSON.stringify(message, null, 2))
+
       // Transform SDK messages into frontend format
       const frontendMessages = transformSDKMessage(message as SDKIncomingMessage)
       for (const msg of frontendMessages) {
@@ -56,6 +70,12 @@ export async function handleQuery(
       stop_reason: 'end_turn',
     })
   } catch (error) {
+    // Log full error details for debugging
+    console.error('SDK Error:', error)
+    if (error instanceof Error) {
+      console.error('Error stack:', error.stack)
+    }
+
     onMessage({
       type: 'error',
       error: error instanceof Error ? error.message : 'Unknown error',

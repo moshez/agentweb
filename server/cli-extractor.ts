@@ -6,10 +6,13 @@
  * filesystem, so we need to extract the CLI to a real file on disk.
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, symlinkSync, unlinkSync } from 'fs'
 import { tmpdir } from 'os'
 import path from 'path'
 import { createHash } from 'crypto'
+
+// Cache for the bin directory containing our runtime symlink
+let runtimeBinDir: string | undefined
 
 // Cache the extracted path to avoid re-extracting on every query
 let extractedCliPath: string | undefined
@@ -147,4 +150,77 @@ function resolveSdkCliPath(): string | undefined {
 export function cleanupExtractedCli(): void {
   // Cleanup is optional - temp files will be cleaned up by OS eventually
   // We keep them around for reuse between restarts
+}
+
+// Track whether we've set up self as runtime
+let usingSelfAsRuntime = false
+
+/**
+ * Get the JavaScript runtime for executing CLI
+ *
+ * When running as a compiled Bun binary, we always use the binary itself
+ * as the runtime to ensure consistent behavior regardless of what's
+ * installed on the user's system.
+ */
+export function getJsRuntime(): 'node' | 'bun' | undefined {
+  // Not a compiled binary - let SDK auto-detect
+  if (!isCompiledBinary()) {
+    return undefined
+  }
+
+  // Always use self as runtime for compiled binaries
+  // This ensures consistent behavior regardless of system node/bun versions
+  if (!usingSelfAsRuntime) {
+    setupSelfAsRuntime()
+    usingSelfAsRuntime = true
+  }
+  return 'bun'
+}
+
+/**
+ * Set up the compiled binary to act as its own runtime.
+ * Creates a symlink named 'bun' pointing to our executable.
+ */
+function setupSelfAsRuntime(): void {
+  if (runtimeBinDir) {
+    return // Already set up
+  }
+
+  try {
+    // Get path to our executable
+    const execPath = process.execPath
+
+    // Create temp bin directory
+    runtimeBinDir = path.join(tmpdir(), 'agentweb-bin')
+    if (!existsSync(runtimeBinDir)) {
+      mkdirSync(runtimeBinDir, { recursive: true })
+    }
+
+    // Create symlink: bun -> our executable
+    const bunLink = path.join(runtimeBinDir, 'bun')
+    if (existsSync(bunLink)) {
+      unlinkSync(bunLink)
+    }
+    symlinkSync(execPath, bunLink)
+    // NOTE: Don't log to stdout - CLI uses it for JSON protocol
+    // console.log(`Created runtime symlink: ${bunLink} -> ${execPath}`)
+  } catch (error) {
+    console.error('Failed to set up self as runtime:', error)
+  }
+}
+
+/**
+ * Get environment variables for SDK execution.
+ * If using self as runtime, prepends our bin directory to PATH.
+ */
+export function getRuntimeEnv(): Record<string, string> {
+  const env = { ...process.env } as Record<string, string>
+
+  if (usingSelfAsRuntime && runtimeBinDir) {
+    // Prepend our bin directory to PATH so SDK finds our 'bun' symlink
+    const currentPath = env.PATH || ''
+    env.PATH = `${runtimeBinDir}${path.delimiter}${currentPath}`
+  }
+
+  return env
 }

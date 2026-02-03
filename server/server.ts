@@ -10,6 +10,27 @@ import { handleQuery } from './query-handler.js'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+// Check if we're being invoked as a script runner (for self-as-runtime support)
+// When the binary is symlinked as 'bun' and invoked with a .js file, run that file
+const firstArg = process.argv[2]
+if (firstArg && firstArg.endsWith('.js') && existsSync(firstArg)) {
+  // We're being asked to run a JavaScript file
+  // Import and run it - this works because Bun's runtime is embedded in the binary
+  // NOTE: Don't log anything to stdout - the CLI uses it for JSON protocol
+  try {
+    await import(path.resolve(firstArg))
+    // Don't exit - the CLI will handle its own lifecycle
+    // It needs to keep running to process stdin/stdout with the SDK
+  } catch (err) {
+    // Log errors to stderr only
+    console.error('Failed to run script:', err)
+    process.exit(1)
+  }
+  // Block forever - let the imported script handle everything
+  // The process will exit when the CLI terminates or stdin closes
+  await new Promise(() => {})
+}
+
 const PORT = parseInt(process.env.PORT || '8765', 10)
 
 const app = express()
