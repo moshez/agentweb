@@ -1,5 +1,6 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { QueryRequest, SDKMessage, ErrorMessage, SDKIncomingMessage, SDKContentBlock } from './types.js'
+import { getClaudeCodeCliPath } from './cli-extractor.js'
 
 /**
  * Query handler that integrates with the Claude Agent SDK.
@@ -21,6 +22,9 @@ export async function handleQuery(
   })
 
   try {
+    // Get the CLI path (needed for compiled Bun binaries)
+    const pathToClaudeCodeExecutable = getClaudeCodeCliPath()
+
     // Call the Claude Agent SDK
     for await (const message of query({
       prompt: request.prompt,
@@ -35,6 +39,8 @@ export async function handleQuery(
         allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch'],
         // Pass through environment variables (including ANTHROPIC_API_KEY)
         env: process.env as Record<string, string>,
+        // For compiled Bun binaries, use the extracted CLI path
+        pathToClaudeCodeExecutable,
       },
     })) {
       // Transform SDK messages into frontend format
