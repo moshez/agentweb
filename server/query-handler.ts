@@ -32,6 +32,8 @@ export async function handleQuery(
         permissionMode: 'acceptEdits',
         // Enable common tools
         allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch'],
+        // Pass through environment variables (including ANTHROPIC_API_KEY)
+        env: process.env as Record<string, string>,
       },
     })) {
       // Transform SDK messages into frontend format
