@@ -9,7 +9,7 @@ import { handleQuery } from './query-handler.js'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const PORT = parseInt(process.env.PORT || '8888', 10)
+const PORT = parseInt(process.env.PORT || '8765', 10)
 
 const app = express()
 
