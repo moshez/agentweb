@@ -1,11 +1,9 @@
+import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { QueryRequest, SDKMessage, ErrorMessage } from './types.js'
 
 /**
- * Mock implementation of the query handler.
- * In production, this would use the Claude Agent SDK.
- *
- * TODO: Replace with actual Agent SDK integration:
- * import { query } from '@anthropic-ai/claude-agent-sdk'
+ * Query handler that integrates with the Claude Agent SDK.
+ * Transforms SDK messages into the format expected by the frontend.
  */
 
 export type MessageCallback = (message: SDKMessage | ErrorMessage) => void
@@ -14,20 +12,34 @@ export async function handleQuery(
   request: QueryRequest,
   onMessage: MessageCallback
 ): Promise<void> {
+  const sessionId = generateSessionId()
+
   // Send start message
   onMessage({
     type: 'start',
-    session_id: generateSessionId(),
+    session_id: sessionId,
   })
 
   try {
-    // TODO: Replace with actual Agent SDK call
-    // for await (const message of query({ prompt: request.prompt, ...request.options })) {
-    //   onMessage(message)
-    // }
-
-    // Mock response for now
-    await mockAgentResponse(request.prompt, onMessage)
+    // Call the Claude Agent SDK
+    for await (const message of query({
+      prompt: request.prompt,
+      options: {
+        model: request.options?.model,
+        systemPrompt: request.options?.systemPrompt,
+        mcpServers: request.options?.mcpServers as Record<string, any> | undefined,
+        // Use acceptEdits mode to auto-approve file edits
+        permissionMode: 'acceptEdits',
+        // Enable common tools
+        allowedTools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch'],
+      },
+    })) {
+      // Transform SDK messages into frontend format
+      const frontendMessages = transformSDKMessage(message)
+      for (const msg of frontendMessages) {
+        onMessage(msg)
+      }
+    }
 
     // Send end message
     onMessage({
@@ -42,30 +54,116 @@ export async function handleQuery(
   }
 }
 
-async function mockAgentResponse(
-  prompt: string,
-  onMessage: MessageCallback
-): Promise<void> {
-  // Simulate thinking
-  onMessage({
-    type: 'thinking',
-    content: `Processing request: "${prompt.substring(0, 50)}..."`,
-  })
+/**
+ * Transform an SDK message into frontend message format.
+ * The SDK returns complex nested messages that we flatten for the frontend.
+ */
+function transformSDKMessage(message: any): SDKMessage[] {
+  const messages: SDKMessage[] = []
 
-  // Small delay to simulate processing
-  await delay(100)
+  switch (message.type) {
+    case 'assistant': {
+      // Assistant messages contain content blocks
+      const content = message.message?.content
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block.type === 'text' && block.text) {
+            messages.push({
+              type: 'text',
+              content: block.text,
+            })
+          } else if (block.type === 'tool_use') {
+            messages.push({
+              type: 'tool_use',
+              id: block.id,
+              name: block.name,
+              input: block.input || {},
+            })
+          } else if (block.type === 'thinking' && block.thinking) {
+            messages.push({
+              type: 'thinking',
+              content: block.thinking,
+            })
+          }
+        }
+      }
+      break
+    }
 
-  // Send text response
-  onMessage({
-    type: 'text',
-    content: `This is a mock response to: "${prompt}"\n\nThe Claude Agent SDK integration is not yet implemented. Once integrated, this will stream actual agent responses.`,
-  })
+    case 'user': {
+      // User messages contain tool results
+      const content = message.message?.content
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block.type === 'tool_result') {
+            let resultContent: string
+            if (typeof block.content === 'string') {
+              resultContent = block.content
+            } else if (Array.isArray(block.content)) {
+              // Extract text from content array
+              resultContent = block.content
+                .filter((c: any) => c.type === 'text')
+                .map((c: any) => c.text)
+                .join('\n')
+            } else {
+              resultContent = JSON.stringify(block.content)
+            }
+
+            messages.push({
+              type: 'tool_result',
+              tool_use_id: block.tool_use_id,
+              content: resultContent,
+              is_error: block.is_error || false,
+            })
+          }
+        }
+      }
+      break
+    }
+
+    case 'result': {
+      // Result messages indicate completion
+      if (message.subtype === 'success' && message.result) {
+        messages.push({
+          type: 'text',
+          content: message.result,
+        })
+      } else if (message.is_error && message.errors) {
+        for (const error of message.errors) {
+          messages.push({
+            type: 'error',
+            error: error,
+          })
+        }
+      }
+      break
+    }
+
+    case 'system': {
+      // System init messages - we can log them but don't need to display
+      if (message.subtype === 'init') {
+        // Optionally could send a system message to frontend
+        // For now, we just acknowledge the session started
+      }
+      break
+    }
+
+    default:
+      // For unknown message types, pass them through as-is if they have content
+      if ('content' in message && message.content) {
+        messages.push({
+          type: 'text',
+          content: typeof message.content === 'string'
+            ? message.content
+            : JSON.stringify(message.content),
+        })
+      }
+      break
+  }
+
+  return messages
 }
 
 function generateSessionId(): string {
   return `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }
