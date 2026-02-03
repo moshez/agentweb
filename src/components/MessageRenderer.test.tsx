@@ -67,22 +67,32 @@ describe('MessageRenderer', () => {
     expect(screen.getByText('Something went wrong')).toBeInTheDocument()
   })
 
-  it('renders start message', () => {
+  it('renders start message as null (not displayed)', () => {
     const message: SDKMessage = {
       type: 'start',
       session_id: 'test-session',
     }
-    render(<MessageRenderer message={message} />)
-    expect(screen.getByText('Session started')).toBeInTheDocument()
+    const { container } = render(<MessageRenderer message={message} />)
+    expect(container.firstChild).toBeNull()
   })
 
-  it('renders end message', () => {
+  it('renders end message as null (not displayed)', () => {
     const message: SDKMessage = {
       type: 'end',
       stop_reason: 'end_turn',
     }
+    const { container } = render(<MessageRenderer message={message} />)
+    expect(container.firstChild).toBeNull()
+  })
+
+  it('renders user message', () => {
+    const message: SDKMessage = {
+      type: 'user',
+      content: 'Hello, Claude!',
+    }
     render(<MessageRenderer message={message} />)
-    expect(screen.getByText('Response complete')).toBeInTheDocument()
+    expect(screen.getByText('You')).toBeInTheDocument()
+    expect(screen.getByText('Hello, Claude!')).toBeInTheDocument()
   })
 
   it('renders unknown message type as JSON', () => {

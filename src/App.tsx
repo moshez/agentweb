@@ -1,5 +1,5 @@
-import { useCallback } from 'react'
-import { ConversationView, InputBox, StatusIndicator } from './components'
+import { useCallback, useState } from 'react'
+import { ConversationView, InputBox, StatusIndicator, Sidebar } from './components'
 import { useWebSocket } from './hooks'
 import './App.css'
 
@@ -17,7 +17,20 @@ function getWebSocketUrl(): string {
 
 function App() {
   const wsUrl = getWebSocketUrl()
-  const { messages, status, send, clearMessages, isProcessing } = useWebSocket(wsUrl)
+  const {
+    messages,
+    status,
+    send,
+    stop,
+    clearMessages,
+    isProcessing,
+    sessionId,
+    sessions,
+    createNewSession,
+    loadSession,
+  } = useWebSocket(wsUrl)
+
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const handleSubmit = useCallback(
     (message: string) => {
@@ -30,8 +43,31 @@ function App() {
     clearMessages()
   }, [clearMessages])
 
+  const handleNewSession = useCallback(() => {
+    createNewSession()
+    setSidebarOpen(false)
+  }, [createNewSession])
+
+  const handleSelectSession = useCallback(
+    (id: string) => {
+      loadSession(id)
+      setSidebarOpen(false)
+    },
+    [loadSession]
+  )
+
+  const canSend = status === 'connected'
+
   return (
-    <div className="app">
+    <div className={`app ${sidebarOpen ? 'sidebar-open' : ''}`}>
+      <Sidebar
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        sessions={sessions}
+        currentSessionId={sessionId}
+        onNewSession={handleNewSession}
+        onSelectSession={handleSelectSession}
+      />
       <header className="app-header">
         <h1 className="app-title">agentweb</h1>
         <div className="header-actions">
@@ -49,7 +85,9 @@ function App() {
         <ConversationView messages={messages} isProcessing={isProcessing} />
         <InputBox
           onSubmit={handleSubmit}
-          disabled={status !== 'connected' || isProcessing}
+          onStop={stop}
+          canSend={canSend}
+          isProcessing={isProcessing}
           placeholder={
             status !== 'connected'
               ? 'Waiting for connection...'

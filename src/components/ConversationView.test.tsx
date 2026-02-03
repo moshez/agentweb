@@ -14,15 +14,13 @@ describe('ConversationView', () => {
 
   it('renders messages', () => {
     const messages: SDKMessage[] = [
-      { type: 'start', session_id: 'test' },
+      { type: 'user', content: 'Hello from user' },
       { type: 'text', content: 'Hello world' },
-      { type: 'end', stop_reason: 'end_turn' },
     ]
     render(<ConversationView messages={messages} isProcessing={false} />)
 
-    expect(screen.getByText('Session started')).toBeInTheDocument()
+    expect(screen.getByText('Hello from user')).toBeInTheDocument()
     expect(screen.getByText('Hello world')).toBeInTheDocument()
-    expect(screen.getByText('Response complete')).toBeInTheDocument()
   })
 
   it('shows processing indicator when isProcessing is true', () => {

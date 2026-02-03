@@ -4,13 +4,13 @@ import { InputBox } from './InputBox'
 
 describe('InputBox', () => {
   it('renders with placeholder', () => {
-    render(<InputBox onSubmit={() => {}} placeholder="Test placeholder" />)
+    render(<InputBox onSubmit={() => {}} canSend={true} isProcessing={false} placeholder="Test placeholder" />)
     expect(screen.getByPlaceholderText('Test placeholder')).toBeInTheDocument()
   })
 
   it('calls onSubmit when button is clicked', () => {
     const onSubmit = vi.fn()
-    render(<InputBox onSubmit={onSubmit} />)
+    render(<InputBox onSubmit={onSubmit} canSend={true} isProcessing={false} />)
 
     const textarea = screen.getByRole('textbox')
     fireEvent.change(textarea, { target: { value: 'Test message' } })
@@ -23,7 +23,7 @@ describe('InputBox', () => {
 
   it('calls onSubmit when Enter is pressed', () => {
     const onSubmit = vi.fn()
-    render(<InputBox onSubmit={onSubmit} />)
+    render(<InputBox onSubmit={onSubmit} canSend={true} isProcessing={false} />)
 
     const textarea = screen.getByRole('textbox')
     fireEvent.change(textarea, { target: { value: 'Test message' } })
@@ -34,7 +34,7 @@ describe('InputBox', () => {
 
   it('does not submit on Shift+Enter', () => {
     const onSubmit = vi.fn()
-    render(<InputBox onSubmit={onSubmit} />)
+    render(<InputBox onSubmit={onSubmit} canSend={true} isProcessing={false} />)
 
     const textarea = screen.getByRole('textbox')
     fireEvent.change(textarea, { target: { value: 'Test message' } })
@@ -45,7 +45,7 @@ describe('InputBox', () => {
 
   it('clears input after submission', () => {
     const onSubmit = vi.fn()
-    render(<InputBox onSubmit={onSubmit} />)
+    render(<InputBox onSubmit={onSubmit} canSend={true} isProcessing={false} />)
 
     const textarea = screen.getByRole<HTMLTextAreaElement>('textbox')
     fireEvent.change(textarea, { target: { value: 'Test message' } })
@@ -54,19 +54,30 @@ describe('InputBox', () => {
     expect(textarea.value).toBe('')
   })
 
-  it('disables input when disabled prop is true', () => {
-    render(<InputBox onSubmit={() => {}} disabled />)
+  it('disables send button when canSend is false', () => {
+    render(<InputBox onSubmit={() => {}} canSend={false} isProcessing={false} />)
 
     const textarea = screen.getByRole('textbox')
+    fireEvent.change(textarea, { target: { value: 'Test message' } })
     const button = screen.getByRole('button', { name: 'Send' })
 
-    expect(textarea).toBeDisabled()
     expect(button).toBeDisabled()
+  })
+
+  it('shows stop button when isProcessing is true', () => {
+    const onStop = vi.fn()
+    render(<InputBox onSubmit={() => {}} onStop={onStop} canSend={true} isProcessing={true} />)
+
+    const button = screen.getByRole('button', { name: 'Stop' })
+    expect(button).toBeInTheDocument()
+
+    fireEvent.click(button)
+    expect(onStop).toHaveBeenCalled()
   })
 
   it('does not submit empty messages', () => {
     const onSubmit = vi.fn()
-    render(<InputBox onSubmit={onSubmit} />)
+    render(<InputBox onSubmit={onSubmit} canSend={true} isProcessing={false} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
@@ -75,7 +86,7 @@ describe('InputBox', () => {
 
   it('does not submit whitespace-only messages', () => {
     const onSubmit = vi.fn()
-    render(<InputBox onSubmit={onSubmit} />)
+    render(<InputBox onSubmit={onSubmit} canSend={true} isProcessing={false} />)
 
     const textarea = screen.getByRole('textbox')
     fireEvent.change(textarea, { target: { value: '   ' } })

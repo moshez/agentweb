@@ -5,6 +5,7 @@
 export interface QueryRequest {
   prompt: string
   options?: QueryOptions
+  messages?: ConversationMessage[]
 }
 
 export interface QueryOptions {
@@ -12,6 +13,25 @@ export interface QueryOptions {
   maxTokens?: number
   systemPrompt?: string
   mcpServers?: Record<string, unknown>
+}
+
+/**
+ * Conversation message format for multi-turn support
+ */
+export interface ConversationMessage {
+  role: 'user' | 'assistant'
+  content: string | ConversationContentBlock[]
+}
+
+export interface ConversationContentBlock {
+  type: 'text' | 'tool_use' | 'tool_result'
+  text?: string
+  id?: string
+  name?: string
+  input?: Record<string, unknown>
+  tool_use_id?: string
+  content?: string
+  is_error?: boolean
 }
 
 export interface SDKMessage {
@@ -50,4 +70,24 @@ export interface SDKIncomingMessage {
   is_error?: boolean
   errors?: string[]
   content?: unknown
+}
+
+/**
+ * Session types for persistent storage
+ */
+
+export interface Session {
+  id: string
+  name: string
+  createdAt: string
+  updatedAt: string
+  messages: SDKMessage[]
+  sdkSessionId?: string
+}
+
+export interface SessionSummary {
+  id: string
+  name: string
+  createdAt: string
+  updatedAt: string
 }

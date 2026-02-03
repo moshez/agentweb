@@ -1,216 +1,323 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { handleQuery, MessageCallback } from './query-handler.js'
-import type { QueryRequest, SDKMessage } from './types.js'
+import { createSession, resumeSession, type MessageCallback } from './query-handler.js'
+import type { SDKMessage } from './types.js'
+
+// Mock the SDK session
+const mockSession = {
+  sessionId: 'mock-session-123',
+  send: vi.fn(),
+  close: vi.fn(),
+  stream: vi.fn(),
+}
 
 // Mock the SDK
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
-  query: vi.fn(),
+  unstable_v2_createSession: vi.fn(() => mockSession),
+  unstable_v2_resumeSession: vi.fn(() => mockSession),
 }))
 
-import { query } from '@anthropic-ai/claude-agent-sdk'
-const mockQuery = vi.mocked(query)
+// Mock CLI extractor
+vi.mock('./cli-extractor.js', () => ({
+  getClaudeCodeCliPath: vi.fn(() => '/mock/cli/path'),
+  getJsRuntime: vi.fn(() => 'node'),
+  getRuntimeEnv: vi.fn(() => ({ PATH: '/mock/path' })),
+}))
+
+import { unstable_v2_createSession, unstable_v2_resumeSession } from '@anthropic-ai/claude-agent-sdk'
+const mockCreateSession = vi.mocked(unstable_v2_createSession)
+const mockResumeSession = vi.mocked(unstable_v2_resumeSession)
 
 // Helper to create an async generator from values
-function createMockGenerator<T>(values: T[]): () => AsyncGenerator<T> {
-  return async function* () {
-    await Promise.resolve() // Ensure this is a proper async generator
+function createMockStream<T>(values: T[]): AsyncGenerator<T> {
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async function* generator() {
     for (const value of values) {
       yield value
     }
   }
+  return generator()
 }
 
-describe('handleQuery', () => {
+describe('createSession', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Reset stream mock to return empty by default
+    mockSession.stream.mockReturnValue(createMockStream([]))
   })
 
-  it('sends start message', async () => {
-    // Setup mock to return an empty async generator
-    mockQuery.mockImplementation(createMockGenerator([]))
-
+  it('creates a session with correct options', () => {
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
-    const request: QueryRequest = { prompt: 'Hello' }
 
-    await handleQuery(request, onMessage)
+    createSession(onMessage, { model: 'claude-3-opus' })
 
+    expect(mockCreateSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'claude-3-opus',
+        pathToClaudeCodeExecutable: '/mock/cli/path',
+        executable: 'node',
+      })
+    )
+  })
+
+  it('uses default model when not specified', () => {
+    const onMessage = vi.fn<Parameters<MessageCallback>, void>()
+
+    createSession(onMessage)
+
+    expect(mockCreateSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'claude-sonnet-4-20250514',
+      })
+    )
+  })
+
+  it('returns session controller with sendMessage and close', () => {
+    const onMessage = vi.fn<Parameters<MessageCallback>, void>()
+
+    const controller = createSession(onMessage)
+
+    expect(controller).toHaveProperty('session')
+    expect(controller).toHaveProperty('sendMessage')
+    expect(controller).toHaveProperty('close')
+    expect(typeof controller.sendMessage).toBe('function')
+    expect(typeof controller.close).toBe('function')
+  })
+
+  it('sendMessage sends start message and calls session.send', async () => {
+    const onMessage = vi.fn<Parameters<MessageCallback>, void>()
+
+    const controller = createSession(onMessage)
+    await controller.sendMessage('Hello')
+
+    // Should send start message with session ID
     const startMessage = onMessage.mock.calls.find(
       (call) => (call[0] as SDKMessage).type === 'start'
     )
     expect(startMessage).toBeDefined()
+    expect((startMessage![0] as { session_id: string }).session_id).toBe('mock-session-123')
+
+    // Should call session.send
+    expect(mockSession.send).toHaveBeenCalledWith('Hello')
   })
 
-  it('sends end message', async () => {
-    mockQuery.mockImplementation(createMockGenerator([]))
-
+  it('close calls session.close', () => {
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
-    const request: QueryRequest = { prompt: 'Hello' }
 
-    await handleQuery(request, onMessage)
+    const controller = createSession(onMessage)
+    controller.close()
 
-    const endMessage = onMessage.mock.calls.find(
-      (call) => (call[0] as SDKMessage).type === 'end'
-    )
-    expect(endMessage).toBeDefined()
+    expect(mockSession.close).toHaveBeenCalled()
   })
 
-  it('transforms assistant text messages', async () => {
-    mockQuery.mockImplementation(createMockGenerator([{
-      type: 'assistant',
-      message: {
-        content: [
-          { type: 'text', text: 'Hello from Claude!' }
-        ]
-      }
-    }]))
-
+  it('handles sendMessage errors', async () => {
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
-    const request: QueryRequest = { prompt: 'Hello' }
+    mockSession.send.mockRejectedValueOnce(new Error('Send failed'))
 
-    await handleQuery(request, onMessage)
-
-    const textMessage = onMessage.mock.calls.find(
-      (call) => (call[0] as SDKMessage).type === 'text'
-    )
-    expect(textMessage).toBeDefined()
-    const message = textMessage![0] as { type: string; content: string }
-    expect(message.content).toBe('Hello from Claude!')
-  })
-
-  it('transforms tool_use messages', async () => {
-    mockQuery.mockImplementation(createMockGenerator([{
-      type: 'assistant',
-      message: {
-        content: [
-          { type: 'tool_use', id: 'tool_123', name: 'Read', input: { file_path: '/test.txt' } }
-        ]
-      }
-    }]))
-
-    const onMessage = vi.fn<Parameters<MessageCallback>, void>()
-    const request: QueryRequest = { prompt: 'Read a file' }
-
-    await handleQuery(request, onMessage)
-
-    const toolUseMessage = onMessage.mock.calls.find(
-      (call) => (call[0] as SDKMessage).type === 'tool_use'
-    )
-    expect(toolUseMessage).toBeDefined()
-    const message = toolUseMessage![0] as { type: string; id: string; name: string; input: Record<string, unknown> }
-    expect(message.name).toBe('Read')
-    expect(message.input.file_path).toBe('/test.txt')
-  })
-
-  it('transforms tool_result messages', async () => {
-    mockQuery.mockImplementation(createMockGenerator([{
-      type: 'user',
-      message: {
-        content: [
-          { type: 'tool_result', tool_use_id: 'tool_123', content: 'File contents here' }
-        ]
-      }
-    }]))
-
-    const onMessage = vi.fn<Parameters<MessageCallback>, void>()
-    const request: QueryRequest = { prompt: 'Read a file' }
-
-    await handleQuery(request, onMessage)
-
-    const toolResultMessage = onMessage.mock.calls.find(
-      (call) => (call[0] as SDKMessage).type === 'tool_result'
-    )
-    expect(toolResultMessage).toBeDefined()
-    const message = toolResultMessage![0] as { type: string; tool_use_id: string; content: string }
-    expect(message.tool_use_id).toBe('tool_123')
-    expect(message.content).toBe('File contents here')
-  })
-
-  it('transforms thinking messages', async () => {
-    mockQuery.mockImplementation(createMockGenerator([{
-      type: 'assistant',
-      message: {
-        content: [
-          { type: 'thinking', thinking: 'Let me analyze this...' }
-        ]
-      }
-    }]))
-
-    const onMessage = vi.fn<Parameters<MessageCallback>, void>()
-    const request: QueryRequest = { prompt: 'Hello' }
-
-    await handleQuery(request, onMessage)
-
-    const thinkingMessage = onMessage.mock.calls.find(
-      (call) => (call[0] as SDKMessage).type === 'thinking'
-    )
-    expect(thinkingMessage).toBeDefined()
-    const message = thinkingMessage![0] as { type: string; content: string }
-    expect(message.content).toBe('Let me analyze this...')
-  })
-
-  it('handles SDK errors', async () => {
-    // eslint-disable-next-line require-yield -- yield is unreachable due to throw
-    mockQuery.mockImplementation(async function* () {
-      await Promise.resolve() // Ensure this is a proper async generator
-      throw new Error('API connection failed')
-    })
-
-    const onMessage = vi.fn<Parameters<MessageCallback>, void>()
-    const request: QueryRequest = { prompt: 'Hello' }
-
-    await handleQuery(request, onMessage)
+    const controller = createSession(onMessage)
+    await controller.sendMessage('Hello')
 
     const errorMessage = onMessage.mock.calls.find(
       (call) => (call[0] as SDKMessage).type === 'error'
     )
     expect(errorMessage).toBeDefined()
-    const message = errorMessage![0] as { type: string; error: string }
-    expect(message.error).toBe('API connection failed')
+    expect((errorMessage![0] as { error: string }).error).toBe('Send failed')
+  })
+})
+
+describe('resumeSession', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSession.stream.mockReturnValue(createMockStream([]))
   })
 
-  it('passes options to SDK', async () => {
-    mockQuery.mockImplementation(createMockGenerator([]))
-
+  it('resumes session with correct session ID', () => {
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
-    const request: QueryRequest = {
-      prompt: 'Hello',
-      options: { model: 'claude-3-opus', systemPrompt: 'Be helpful' },
-    }
 
-    await handleQuery(request, onMessage)
+    resumeSession('existing-session-456', onMessage)
 
-    expect(mockQuery).toHaveBeenCalledWith(
+    expect(mockResumeSession).toHaveBeenCalledWith(
+      'existing-session-456',
       expect.objectContaining({
-        prompt: 'Hello',
-        options: expect.objectContaining({
-          model: 'claude-3-opus',
-          systemPrompt: 'Be helpful',
-        }) as Record<string, unknown>,
+        model: 'claude-sonnet-4-20250514',
       })
     )
   })
 
-  it('does not duplicate text from result messages', async () => {
-    // Result messages with subtype 'success' should NOT emit text
-    // (the text is already in the preceding assistant message)
-    mockQuery.mockImplementation(createMockGenerator([{
-      type: 'result',
-      subtype: 'success',
-      result: 'Task completed successfully'
-    }]))
+  it('accepts model option', () => {
+    const onMessage = vi.fn<Parameters<MessageCallback>, void>()
+
+    resumeSession('existing-session-456', onMessage, { model: 'claude-3-opus' })
+
+    expect(mockResumeSession).toHaveBeenCalledWith(
+      'existing-session-456',
+      expect.objectContaining({
+        model: 'claude-3-opus',
+      })
+    )
+  })
+})
+
+describe('message streaming', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('transforms assistant text messages', async () => {
+    mockSession.stream.mockReturnValue(createMockStream([
+      {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: 'Hello from Claude!' }
+          ]
+        }
+      }
+    ]))
 
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
-    const request: QueryRequest = { prompt: 'Do something' }
+    createSession(onMessage)
 
-    await handleQuery(request, onMessage)
+    // Wait for stream processing
+    await new Promise(resolve => setTimeout(resolve, 10))
 
     const textMessage = onMessage.mock.calls.find(
-      (call) => {
-        const msg = call[0] as SDKMessage
-        return msg.type === 'text'
+      (call) => (call[0] as SDKMessage).type === 'text'
+    )
+    expect(textMessage).toBeDefined()
+    expect((textMessage![0] as { content: string }).content).toBe('Hello from Claude!')
+  })
+
+  it('transforms tool_use messages', async () => {
+    mockSession.stream.mockReturnValue(createMockStream([
+      {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', id: 'tool_123', name: 'Read', input: { file_path: '/test.txt' } }
+          ]
+        }
       }
+    ]))
+
+    const onMessage = vi.fn<Parameters<MessageCallback>, void>()
+    createSession(onMessage)
+
+    // Wait for stream processing
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    const toolUseMessage = onMessage.mock.calls.find(
+      (call) => (call[0] as SDKMessage).type === 'tool_use'
+    )
+    expect(toolUseMessage).toBeDefined()
+    const msg = toolUseMessage![0] as { name: string; input: Record<string, unknown> }
+    expect(msg.name).toBe('Read')
+    expect(msg.input.file_path).toBe('/test.txt')
+  })
+
+  it('transforms tool_result messages', async () => {
+    mockSession.stream.mockReturnValue(createMockStream([
+      {
+        type: 'user',
+        message: {
+          content: [
+            { type: 'tool_result', tool_use_id: 'tool_123', content: 'File contents here' }
+          ]
+        }
+      }
+    ]))
+
+    const onMessage = vi.fn<Parameters<MessageCallback>, void>()
+    createSession(onMessage)
+
+    // Wait for stream processing
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    const toolResultMessage = onMessage.mock.calls.find(
+      (call) => (call[0] as SDKMessage).type === 'tool_result'
+    )
+    expect(toolResultMessage).toBeDefined()
+    const msg = toolResultMessage![0] as { tool_use_id: string; content: string }
+    expect(msg.tool_use_id).toBe('tool_123')
+    expect(msg.content).toBe('File contents here')
+  })
+
+  it('transforms thinking messages', async () => {
+    mockSession.stream.mockReturnValue(createMockStream([
+      {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'thinking', thinking: 'Let me analyze this...' }
+          ]
+        }
+      }
+    ]))
+
+    const onMessage = vi.fn<Parameters<MessageCallback>, void>()
+    createSession(onMessage)
+
+    // Wait for stream processing
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    const thinkingMessage = onMessage.mock.calls.find(
+      (call) => (call[0] as SDKMessage).type === 'thinking'
+    )
+    expect(thinkingMessage).toBeDefined()
+    expect((thinkingMessage![0] as { content: string }).content).toBe('Let me analyze this...')
+  })
+
+  it('sends end message on result', async () => {
+    mockSession.stream.mockReturnValue(createMockStream([
+      { type: 'result', subtype: 'success' }
+    ]))
+
+    const onMessage = vi.fn<Parameters<MessageCallback>, void>()
+    createSession(onMessage)
+
+    // Wait for stream processing
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    const endMessage = onMessage.mock.calls.find(
+      (call) => (call[0] as SDKMessage).type === 'end'
+    )
+    expect(endMessage).toBeDefined()
+    expect((endMessage![0] as { stop_reason: string }).stop_reason).toBe('end_turn')
+  })
+
+  it('does not duplicate text from result messages', async () => {
+    mockSession.stream.mockReturnValue(createMockStream([
+      { type: 'result', subtype: 'success', result: 'Task completed' }
+    ]))
+
+    const onMessage = vi.fn<Parameters<MessageCallback>, void>()
+    createSession(onMessage)
+
+    // Wait for stream processing
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    const textMessage = onMessage.mock.calls.find(
+      (call) => (call[0] as SDKMessage).type === 'text'
     )
     // Should NOT find a text message from result
     expect(textMessage).toBeUndefined()
+  })
+
+  it('handles stream errors', async () => {
+    // eslint-disable-next-line require-yield, @typescript-eslint/require-await
+    mockSession.stream.mockReturnValue((async function* () {
+      throw new Error('Stream error')
+    })())
+
+    const onMessage = vi.fn<Parameters<MessageCallback>, void>()
+    createSession(onMessage)
+
+    // Wait for stream processing
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    const errorMessage = onMessage.mock.calls.find(
+      (call) => (call[0] as SDKMessage).type === 'error'
+    )
+    expect(errorMessage).toBeDefined()
+    expect((errorMessage![0] as { error: string }).error).toBe('Stream error')
   })
 })
