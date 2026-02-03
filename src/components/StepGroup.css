@@ -1,0 +1,125 @@
+.step-group {
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  background: var(--step-group-bg, #252525);
+  overflow: hidden;
+}
+
+.step-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  font-size: 0.85rem;
+  text-align: left;
+  transition: background-color 0.2s;
+}
+
+.step-group-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.toggle-icon {
+  font-size: 0.7em;
+  transition: transform 0.2s;
+}
+
+.step-group-content {
+  padding: 0.5rem;
+}
+
+.step-group-latest {
+  padding: 0.5rem;
+}
+
+.step-item {
+  border-radius: 4px;
+  margin-bottom: 0.25rem;
+  overflow: hidden;
+}
+
+.step-item:last-child {
+  margin-bottom: 0;
+}
+
+.step-item.step-tool_use {
+  background: var(--tool-use-bg, #1a3a5c);
+  border-left: 3px solid #3498db;
+}
+
+.step-item.step-tool_result {
+  background: var(--tool-result-bg, #1a4a3a);
+  border-left: 3px solid #2ecc71;
+}
+
+/* Clickable step summary */
+.step-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  font-size: 0.85rem;
+  text-align: left;
+  transition: background-color 0.2s;
+}
+
+.step-summary:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.step-expand-icon {
+  font-size: 0.7em;
+  color: rgba(255, 255, 255, 0.5);
+  flex-shrink: 0;
+}
+
+.step-summary-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Step details (expanded content) */
+.step-details {
+  margin: 0;
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.8rem;
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Collapsed state - more compact */
+.step-group.collapsed .step-group-latest {
+  padding-top: 0;
+}
+
+.step-group.collapsed .step-group-toggle + .step-group-latest {
+  padding-top: 0.5rem;
+}
+
+/* Expanded state */
+.step-group.expanded .step-group-content {
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+/* Detail expanded state for individual items */
+.step-item.detail-expanded {
+  margin-bottom: 0.5rem;
+}

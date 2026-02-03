@@ -10,6 +10,16 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
 import { query } from '@anthropic-ai/claude-agent-sdk'
 const mockQuery = vi.mocked(query)
 
+// Helper to create an async generator from values
+function createMockGenerator<T>(values: T[]): () => AsyncGenerator<T> {
+  return async function* () {
+    await Promise.resolve() // Ensure this is a proper async generator
+    for (const value of values) {
+      yield value
+    }
+  }
+}
+
 describe('handleQuery', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -17,9 +27,7 @@ describe('handleQuery', () => {
 
   it('sends start message', async () => {
     // Setup mock to return an empty async generator
-    mockQuery.mockImplementation(async function* () {
-      // Yield nothing - just start and end
-    })
+    mockQuery.mockImplementation(createMockGenerator([]))
 
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
     const request: QueryRequest = { prompt: 'Hello' }
@@ -33,9 +41,7 @@ describe('handleQuery', () => {
   })
 
   it('sends end message', async () => {
-    mockQuery.mockImplementation(async function* () {
-      // Yield nothing
-    })
+    mockQuery.mockImplementation(createMockGenerator([]))
 
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
     const request: QueryRequest = { prompt: 'Hello' }
@@ -49,16 +55,14 @@ describe('handleQuery', () => {
   })
 
   it('transforms assistant text messages', async () => {
-    mockQuery.mockImplementation(async function* () {
-      yield {
-        type: 'assistant',
-        message: {
-          content: [
-            { type: 'text', text: 'Hello from Claude!' }
-          ]
-        }
+    mockQuery.mockImplementation(createMockGenerator([{
+      type: 'assistant',
+      message: {
+        content: [
+          { type: 'text', text: 'Hello from Claude!' }
+        ]
       }
-    })
+    }]))
 
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
     const request: QueryRequest = { prompt: 'Hello' }
@@ -74,16 +78,14 @@ describe('handleQuery', () => {
   })
 
   it('transforms tool_use messages', async () => {
-    mockQuery.mockImplementation(async function* () {
-      yield {
-        type: 'assistant',
-        message: {
-          content: [
-            { type: 'tool_use', id: 'tool_123', name: 'Read', input: { file_path: '/test.txt' } }
-          ]
-        }
+    mockQuery.mockImplementation(createMockGenerator([{
+      type: 'assistant',
+      message: {
+        content: [
+          { type: 'tool_use', id: 'tool_123', name: 'Read', input: { file_path: '/test.txt' } }
+        ]
       }
-    })
+    }]))
 
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
     const request: QueryRequest = { prompt: 'Read a file' }
@@ -100,16 +102,14 @@ describe('handleQuery', () => {
   })
 
   it('transforms tool_result messages', async () => {
-    mockQuery.mockImplementation(async function* () {
-      yield {
-        type: 'user',
-        message: {
-          content: [
-            { type: 'tool_result', tool_use_id: 'tool_123', content: 'File contents here' }
-          ]
-        }
+    mockQuery.mockImplementation(createMockGenerator([{
+      type: 'user',
+      message: {
+        content: [
+          { type: 'tool_result', tool_use_id: 'tool_123', content: 'File contents here' }
+        ]
       }
-    })
+    }]))
 
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
     const request: QueryRequest = { prompt: 'Read a file' }
@@ -126,16 +126,14 @@ describe('handleQuery', () => {
   })
 
   it('transforms thinking messages', async () => {
-    mockQuery.mockImplementation(async function* () {
-      yield {
-        type: 'assistant',
-        message: {
-          content: [
-            { type: 'thinking', thinking: 'Let me analyze this...' }
-          ]
-        }
+    mockQuery.mockImplementation(createMockGenerator([{
+      type: 'assistant',
+      message: {
+        content: [
+          { type: 'thinking', thinking: 'Let me analyze this...' }
+        ]
       }
-    })
+    }]))
 
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
     const request: QueryRequest = { prompt: 'Hello' }
@@ -151,7 +149,9 @@ describe('handleQuery', () => {
   })
 
   it('handles SDK errors', async () => {
+    // eslint-disable-next-line require-yield -- yield is unreachable due to throw
     mockQuery.mockImplementation(async function* () {
+      await Promise.resolve() // Ensure this is a proper async generator
       throw new Error('API connection failed')
     })
 
@@ -161,7 +161,7 @@ describe('handleQuery', () => {
     await handleQuery(request, onMessage)
 
     const errorMessage = onMessage.mock.calls.find(
-      (call) => (call[0] as any).type === 'error'
+      (call) => (call[0] as SDKMessage).type === 'error'
     )
     expect(errorMessage).toBeDefined()
     const message = errorMessage![0] as { type: string; error: string }
@@ -169,9 +169,7 @@ describe('handleQuery', () => {
   })
 
   it('passes options to SDK', async () => {
-    mockQuery.mockImplementation(async function* () {
-      // Yield nothing
-    })
+    mockQuery.mockImplementation(createMockGenerator([]))
 
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
     const request: QueryRequest = {
@@ -187,19 +185,19 @@ describe('handleQuery', () => {
         options: expect.objectContaining({
           model: 'claude-3-opus',
           systemPrompt: 'Be helpful',
-        }),
+        }) as Record<string, unknown>,
       })
     )
   })
 
-  it('transforms result messages with success', async () => {
-    mockQuery.mockImplementation(async function* () {
-      yield {
-        type: 'result',
-        subtype: 'success',
-        result: 'Task completed successfully'
-      }
-    })
+  it('does not duplicate text from result messages', async () => {
+    // Result messages with subtype 'success' should NOT emit text
+    // (the text is already in the preceding assistant message)
+    mockQuery.mockImplementation(createMockGenerator([{
+      type: 'result',
+      subtype: 'success',
+      result: 'Task completed successfully'
+    }]))
 
     const onMessage = vi.fn<Parameters<MessageCallback>, void>()
     const request: QueryRequest = { prompt: 'Do something' }
@@ -209,9 +207,10 @@ describe('handleQuery', () => {
     const textMessage = onMessage.mock.calls.find(
       (call) => {
         const msg = call[0] as SDKMessage
-        return msg.type === 'text' && (msg as any).content === 'Task completed successfully'
+        return msg.type === 'text'
       }
     )
-    expect(textMessage).toBeDefined()
+    // Should NOT find a text message from result
+    expect(textMessage).toBeUndefined()
   })
 })

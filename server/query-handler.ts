@@ -1,5 +1,5 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
-import type { QueryRequest, SDKMessage, ErrorMessage } from './types.js'
+import type { QueryRequest, SDKMessage, ErrorMessage, SDKIncomingMessage, SDKContentBlock } from './types.js'
 
 /**
  * Query handler that integrates with the Claude Agent SDK.
@@ -27,7 +27,8 @@ export async function handleQuery(
       options: {
         model: request.options?.model,
         systemPrompt: request.options?.systemPrompt,
-        mcpServers: request.options?.mcpServers as Record<string, any> | undefined,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment -- SDK expects specific McpServerConfig type
+        mcpServers: request.options?.mcpServers as any,
         // Use acceptEdits mode to auto-approve file edits
         permissionMode: 'acceptEdits',
         // Enable common tools
@@ -37,7 +38,7 @@ export async function handleQuery(
       },
     })) {
       // Transform SDK messages into frontend format
-      const frontendMessages = transformSDKMessage(message)
+      const frontendMessages = transformSDKMessage(message as SDKIncomingMessage)
       for (const msg of frontendMessages) {
         onMessage(msg)
       }
@@ -60,7 +61,7 @@ export async function handleQuery(
  * Transform an SDK message into frontend message format.
  * The SDK returns complex nested messages that we flatten for the frontend.
  */
-function transformSDKMessage(message: any): SDKMessage[] {
+function transformSDKMessage(message: SDKIncomingMessage): SDKMessage[] {
   const messages: SDKMessage[] = []
 
   switch (message.type) {
@@ -79,7 +80,7 @@ function transformSDKMessage(message: any): SDKMessage[] {
               type: 'tool_use',
               id: block.id,
               name: block.name,
-              input: block.input || {},
+              input: block.input ?? {},
             })
           } else if (block.type === 'thinking' && block.thinking) {
             messages.push({
@@ -104,8 +105,8 @@ function transformSDKMessage(message: any): SDKMessage[] {
             } else if (Array.isArray(block.content)) {
               // Extract text from content array
               resultContent = block.content
-                .filter((c: any) => c.type === 'text')
-                .map((c: any) => c.text)
+                .filter((c: SDKContentBlock) => c.type === 'text')
+                .map((c: SDKContentBlock) => c.text ?? '')
                 .join('\n')
             } else {
               resultContent = JSON.stringify(block.content)
@@ -115,7 +116,7 @@ function transformSDKMessage(message: any): SDKMessage[] {
               type: 'tool_result',
               tool_use_id: block.tool_use_id,
               content: resultContent,
-              is_error: block.is_error || false,
+              is_error: block.is_error ?? false,
             })
           }
         }
@@ -125,12 +126,9 @@ function transformSDKMessage(message: any): SDKMessage[] {
 
     case 'result': {
       // Result messages indicate completion
-      if (message.subtype === 'success' && message.result) {
-        messages.push({
-          type: 'text',
-          content: message.result,
-        })
-      } else if (message.is_error && message.errors) {
+      // Note: Don't emit text for 'success' results - the final text is already
+      // included in the preceding 'assistant' message to avoid duplicates
+      if (message.is_error && message.errors) {
         for (const error of message.errors) {
           messages.push({
             type: 'error',
@@ -152,7 +150,7 @@ function transformSDKMessage(message: any): SDKMessage[] {
 
     default:
       // For unknown message types, pass them through as-is if they have content
-      if ('content' in message && message.content) {
+      if (message.content !== undefined) {
         messages.push({
           type: 'text',
           content: typeof message.content === 'string'
