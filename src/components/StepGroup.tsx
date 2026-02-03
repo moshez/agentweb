@@ -33,6 +33,40 @@ function getStepSummary(step: SDKMessage): string {
   return 'Step'
 }
 
+function getStepDetails(step: SDKMessage): string {
+  if (step.type === 'tool_use') {
+    return JSON.stringify(step.input, null, 2)
+  }
+  if (step.type === 'tool_result') {
+    const content = step.content
+    return typeof content === 'string' ? content : JSON.stringify(content, null, 2)
+  }
+  return JSON.stringify(step, null, 2)
+}
+
+interface StepItemProps {
+  step: SDKMessage
+}
+
+function StepItem({ step }: StepItemProps) {
+  const [isDetailExpanded, setIsDetailExpanded] = useState(false)
+
+  return (
+    <div className={`step-item step-${step.type} ${isDetailExpanded ? 'detail-expanded' : ''}`}>
+      <button
+        className="step-summary"
+        onClick={() => setIsDetailExpanded(!isDetailExpanded)}
+      >
+        <span className="step-expand-icon">{isDetailExpanded ? '▼' : '▶'}</span>
+        <span className="step-summary-text">{getStepSummary(step)}</span>
+      </button>
+      {isDetailExpanded && (
+        <pre className="step-details">{getStepDetails(step)}</pre>
+      )}
+    </div>
+  )
+}
+
 export function StepGroup({ steps }: StepGroupProps) {
   const [isExpanded, setIsExpanded] = useState(false)
 
@@ -54,11 +88,7 @@ export function StepGroup({ steps }: StepGroupProps) {
         </button>
         <div className="step-group-content">
           {steps.map((step, index) => (
-            <div key={index} className={`step-item step-${step.type}`}>
-              <div className="step-summary">
-                {getStepSummary(step)}
-              </div>
-            </div>
+            <StepItem key={index} step={step} />
           ))}
         </div>
       </div>
@@ -77,11 +107,7 @@ export function StepGroup({ steps }: StepGroupProps) {
         </button>
       )}
       <div className="step-group-latest">
-        <div className={`step-item step-${latestStep.type}`}>
-          <div className="step-summary">
-            {getStepSummary(latestStep)}
-          </div>
-        </div>
+        <StepItem step={latestStep} />
       </div>
     </div>
   )

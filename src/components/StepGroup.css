@@ -39,9 +39,9 @@
 }
 
 .step-item {
-  padding: 0.5rem 0.75rem;
   border-radius: 4px;
   margin-bottom: 0.25rem;
+  overflow: hidden;
 }
 
 .step-item:last-child {
@@ -58,12 +58,50 @@
   border-left: 3px solid #2ecc71;
 }
 
+/* Clickable step summary */
 .step-summary {
-  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  border: none;
   color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  font-size: 0.85rem;
+  text-align: left;
+  transition: background-color 0.2s;
+}
+
+.step-summary:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.step-expand-icon {
+  font-size: 0.7em;
+  color: rgba(255, 255, 255, 0.5);
+  flex-shrink: 0;
+}
+
+.step-summary-text {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Step details (expanded content) */
+.step-details {
+  margin: 0;
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.8rem;
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Collapsed state - more compact */
@@ -77,6 +115,11 @@
 
 /* Expanded state */
 .step-group.expanded .step-group-content {
-  max-height: 400px;
+  max-height: 600px;
   overflow-y: auto;
+}
+
+/* Detail expanded state for individual items */
+.step-item.detail-expanded {
+  margin-bottom: 0.5rem;
 }
