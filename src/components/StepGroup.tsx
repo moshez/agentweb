@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { SDKMessage, ToolUseMessage } from '../lib/types'
+import type { SDKMessage } from '../lib/types'
 import './StepGroup.css'
 
 interface StepGroupProps {
@@ -8,23 +8,22 @@ interface StepGroupProps {
 
 function getStepSummary(step: SDKMessage): string {
   if (step.type === 'tool_use') {
-    const toolUse = step as ToolUseMessage
-    const input = toolUse.input as Record<string, unknown>
+    const { name, input } = step
     // Get the description or command for common tools
     if (input.description) {
-      return `${toolUse.name}: ${input.description}`
+      return `${name}: ${String(input.description)}`
     }
     if (input.command) {
       const cmd = String(input.command)
-      return `${toolUse.name}: ${cmd.length > 50 ? cmd.slice(0, 50) + '...' : cmd}`
+      return `${name}: ${cmd.length > 50 ? cmd.slice(0, 50) + '...' : cmd}`
     }
     if (input.pattern) {
-      return `${toolUse.name}: ${input.pattern}`
+      return `${name}: ${String(input.pattern)}`
     }
     if (input.file_path) {
-      return `${toolUse.name}: ${input.file_path}`
+      return `${name}: ${String(input.file_path)}`
     }
-    return toolUse.name
+    return name
   }
   if (step.type === 'tool_result') {
     const content = typeof step.content === 'string' ? step.content : JSON.stringify(step.content)
